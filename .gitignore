@@ -1,0 +1,19 @@
+## Eclipse
+.classpath
+.project
+.metadata
+**/bin/
+/logs/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.externalToolBuilders/
+*.launch
+/build/
+
+.gradle
