@@ -1,0 +1,30 @@
+import java.util.jar.JarEntry;
+
+sourceCompatibility = 1.7
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+eclipse.project { name = appName + "-server" }
+
+jar {
+	from configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+}
+
+// Deploy to a server
+// https://gradle-ssh-plugin.github.io/
+remotes {
+	jsvcServer {
+		host = '***'
+		user = '***'
+		knownHosts = allowAnyHosts
+		identity = file('***')
+	}
+}
+
+task deploy(dependsOn: jar) << {
+	ssh.run {
+		session(remotes.jsvcServer) {
+			put from: projectDir.getAbsolutePath() + '/build/libs/' + artifactName, into: '/usr/local/jmatcher'
+			execute('sudo service jsvcd restart', pty: true)
+		}
+	}
+}
