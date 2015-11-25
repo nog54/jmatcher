@@ -33,7 +33,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	private ServerSocket serverSocket;
 	private Vector<ClientRequestHandler> handlers;
 	private Thread mainThread;
-	private Thread manageHandlersThread;
+	private Thread handlersManagementThread;
 	private boolean isStopping;
 
 	static final int PORT = 11600;
@@ -45,7 +45,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 		this.serverSocket = new ServerSocket(PORT);
 		this.handlers = new Vector<>();
 		this.mainThread = new Thread(this);
-		this.manageHandlersThread = new Thread(new Runnable() {
+		this.handlersManagementThread = new Thread(new Runnable() {
 
 			@Override
 			public void run() {
@@ -56,7 +56,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 						this.freeHandlers();
 					} catch (InterruptedException e) {
 						if (!JMatcherDaemon.this.isStopping()) {
-							JMatcherDaemon.this.getLogger().error("Acceptor loop thread : error occured", e); //$NON-NLS-1$
+							JMatcherDaemon.this.getLogger().error("Handlers management Thread : error occured", e); //$NON-NLS-1$
 						}
 					}
 				}
@@ -65,7 +65,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 			private void freeHandlers() {
 				final Object[] elements = JMatcherDaemon.this.getHandlers().toArray();
 				for (Object element : elements) {
-					ClientRequestHandler handler = (ClientRequestHandler) element;
+					final ClientRequestHandler handler = (ClientRequestHandler) element;
 					if (handler.hasClosedSocket()) {
 						JMatcherDaemon.this.getHandlers().remove(element);
 					}
@@ -79,7 +79,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	public void start() {
 		this.logger.info("starting"); //$NON-NLS-1$
 		this.mainThread.start();
-		this.manageHandlersThread.start();
+		this.handlersManagementThread.start();
 		this.logger.info("started"); //$NON-NLS-1$
 	}
 
@@ -90,7 +90,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 		this.serverSocket.close();
 		final int waitThreadTime = 5000;
 		this.mainThread.join(waitThreadTime);
-		this.manageHandlersThread.join(waitThreadTime);
+		this.handlersManagementThread.join(waitThreadTime);
 		this.logger.info("stopped"); //$NON-NLS-1$
 	}
 
@@ -104,9 +104,12 @@ public class JMatcherDaemon implements Daemon, Runnable {
 		this.logger.info("started acceptor loop"); //$NON-NLS-1$
 
 		while (!this.isStopping) {
-			try (final Socket socket = this.serverSocket.accept()) {
-				this.logger.info(socket.getInetAddress().getHostName());
-				this.logger.info(socket.getInetAddress().getHostAddress());
+			try {
+				@SuppressWarnings("resource")
+				final Socket socket = this.serverSocket.accept();
+				final StringBuilder sb = new StringBuilder();
+				sb.append(socket.getInetAddress().getHostName()).append(":").append(socket.getInetAddress().getHostAddress()); //$NON-NLS-1$
+				this.logger.info(sb.toString());
 				final ClientRequestHandler handler = new ClientRequestHandler(socket, this.logger);
 				this.handlers.addElement(handler);
 				new Thread(handler).start();
@@ -122,9 +125,12 @@ public class JMatcherDaemon implements Daemon, Runnable {
 			}
 		}
 
-		for (ClientRequestHandler handler : this.handlers) {
+		final Object[] elements = this.handlers.toArray();
+		for (Object element : elements) {
+			final ClientRequestHandler handler = (ClientRequestHandler) element;
 			handler.close();
 		}
+
 	}
 
 	/**

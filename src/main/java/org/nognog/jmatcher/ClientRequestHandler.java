@@ -14,7 +14,9 @@
 
 package org.nognog.jmatcher;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.Socket;
 
 import org.apache.logging.log4j.Logger;
@@ -41,6 +43,12 @@ public class ClientRequestHandler implements Runnable {
 
 	@Override
 	public void run() {
+		try {
+			final BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(this.socket.getInputStream()));
+			this.logger.info(bufferedReader.readLine());
+		} catch (IOException e) {
+			this.logger.error("Failed to create buffered reader", e); //$NON-NLS-1$
+		} 
 		this.close();
 	}
 
