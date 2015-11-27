@@ -147,11 +147,4 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	Vector<ClientRequestHandler> getHandlers() {
 		return this.handlers;
 	}
-
-	@SuppressWarnings("all")
-	public static void main(String[] args) throws Exception {
-		final Socket socket = new Socket("nog-jserver1.servehttp.com", PORT); //$NON-NLS-1$
-		socket.close();
-	}
-
 }
