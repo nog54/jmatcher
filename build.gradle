@@ -2,9 +2,6 @@ apply plugin: "java"
 apply plugin: "eclipse"
 apply plugin: 'org.hidetake.ssh'
 
-sourceCompatibility = 1.7
-[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
-
 buildscript {
 	repositories {
 		mavenCentral()
@@ -17,13 +14,18 @@ allprojects {
 	apply plugin: "eclipse"
 	apply plugin: "idea"
 	apply plugin: "java"
+	apply plugin: "maven"
+	
+	sourceCompatibility = 1.7
+	[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 	sourceSets.main.java.srcDirs = ["src/main/java/"]
 	sourceSets.test.java.srcDirs = ["src/test/java/"]
 	sourceSets.main.resources.srcDirs = ["src/main/resources/"]
 	sourceSets.test.resources.srcDirs = ["src/test/resources/"]
 
-	version = '1.0'
+	version = '1.0-SNAPSHOT'
+	group = 'com.github.nog54'
 	ext{ appName = 'jmatcher' }
 
 	repositories {
@@ -34,13 +36,11 @@ allprojects {
 	}
 }
 
-project(":common") {
-	jar.baseName = appName + '-common'
-}
+project(":common") { archivesBaseName = appName + '-common' }
 
 project(":server") {
-	jar.baseName = appName + '-server'
-	
+	archivesBaseName = appName + '-server'
+
 	ext {
 		commonsDaemonVersion = '1.0.15'
 		log4jVersion = '2.4.1'
@@ -60,6 +60,6 @@ project(":server") {
 }
 
 project(":client") {
-	jar.baseName = appName + '-client'
+	archivesBaseName = appName + '-client'
 	dependencies { compile project(":common") }
 }
