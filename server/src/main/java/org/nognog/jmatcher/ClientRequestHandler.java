@@ -19,10 +19,10 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Date;
+import java.util.Random;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.logging.log4j.Logger;
 import org.nognog.jmatcher.request.Request;
 import org.nognog.jmatcher.request.RequestType;
 import org.nognog.jmatcher.response.Response;
@@ -30,35 +30,43 @@ import org.nognog.jmatcher.response.Response;
 /**
  * @author goshi 2015/10/31
  */
-@SuppressWarnings("static-method")
 public class ClientRequestHandler implements Runnable {
 
-	private static final ConcurrentMap<String, InetAddress> map = new ConcurrentHashMap<>();
+	private static final Random random = new Random(new Date().getTime());
 
+	private Integer number;
+	private JMatcherDaemon jmatcherDaemon;
+	private ConcurrentMap<Integer, InetAddress> matchingMap;
 	private Socket socket;
-	private Logger logger;
 	private boolean hasClosedSocket;
-
+	
 	/**
+	 * @param jmatcherDaemon
 	 * @param socket
-	 * @param logger
+	 * @param number
 	 * 
 	 */
-	public ClientRequestHandler(Socket socket, Logger logger) {
+	public ClientRequestHandler(JMatcherDaemon jmatcherDaemon, Socket socket, Integer number) {
+		this.number = number;
+		this.jmatcherDaemon = jmatcherDaemon;
+		this.matchingMap = this.jmatcherDaemon.getMatchingMap();
 		this.socket = socket;
-		this.logger = logger;
 		this.hasClosedSocket = false;
 	}
 
 	@Override
 	public void run() {
+		final StringBuilder sb = new StringBuilder();
+		sb.append("handler number ").append(this.number).append(" - ").append(this.socket.getInetAddress().getHostName()).append(":").append(this.socket.getInetAddress().getHostAddress()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		this.jmatcherDaemon.getLogger().info(sb.toString());
+
 		try (final ObjectInputStream objectInputStream = new ObjectInputStream(this.socket.getInputStream());
 				final ObjectOutputStream objectOutputStream = new ObjectOutputStream(this.socket.getOutputStream())) {
 			final Request request = (Request) objectInputStream.readObject();
 			final Response response = this.performRequest(request);
 			objectOutputStream.writeObject(response);
 		} catch (Exception e) {
-			this.logger.error("Failed to input request", e); //$NON-NLS-1$
+			this.jmatcherDaemon.getLogger().error("Failed to input request", e); //$NON-NLS-1$
 		}
 		this.close();
 	}
@@ -80,35 +88,54 @@ public class ClientRequestHandler implements Runnable {
 	}
 
 	private Response performFindRequest(Request request) {
-		final InetAddress address = map.get(request.getKeyNumber());
+		final InetAddress address = this.matchingMap.get(request.getKeyNumber());
 		final Response result = new Response(request, true);
 		result.setAddress(address);
 		return result;
 	}
 
 	private Response performEntryRequest(Request request) {
-		final String keyNumber = request.getKeyNumber();
-		if (keyNumber == null || keyNumber.equals("")) { //$NON-NLS-1$
-			return new Response(request, false);
+		final Integer entryKeyNumber;
+		synchronized (ClientRequestHandler.class) {
+			entryKeyNumber = this.createUnregistedKeyNumber();
+			if (entryKeyNumber == null) {
+				return new Response(request, false);
+			}
+			if (this.matchingMap.containsKey(entryKeyNumber)) {
+				return new Response(request, false);
+			}
+			this.matchingMap.put(entryKeyNumber, this.socket.getInetAddress());
 		}
-		final InetAddress previousValue = map.putIfAbsent(keyNumber, this.socket.getInetAddress());
-		final boolean isAlreadyAssociated = (previousValue != null);
-		if (isAlreadyAssociated) {
-			return new Response(request, false);
+		this.jmatcherDaemon.logMatchingMap();
+		final Response response = new Response(request, true);
+		response.setKeyNumber(entryKeyNumber);
+		return response;
+	}
+
+	private Integer createUnregistedKeyNumber() {
+		if (this.matchingMap.size() >= this.jmatcherDaemon.getMatchingMapCapacity()) {
+			return null;
 		}
-		this.logger.info(map);
-		return new Response(request, true);
+		final Integer key = Integer.valueOf(random.nextInt(this.jmatcherDaemon.getBoundOfKeyNumber()));
+
+		if (!this.matchingMap.containsKey(key)) {
+			return key;
+		}
+		return this.createUnregistedKeyNumber();
 	}
 
 	private Response performCancelEntryRequest(Request request) {
-		final String keyNumber = request.getKeyNumber();
+		final Integer keyNumber = request.getKeyNumber();
 		if (keyNumber == null || keyNumber.equals("")) { //$NON-NLS-1$
 			return new Response(request, false);
 		}
-		final InetAddress previousAddress = map.remove(request.getKeyNumber());
+		final InetAddress previousAddress;
+		synchronized (ClientRequestHandler.class) {
+			previousAddress = this.matchingMap.remove(request.getKeyNumber());
+		}
 		final Response response = new Response(request, true);
 		response.setAddress(previousAddress);
-		this.logger.info(map);
+		this.jmatcherDaemon.logMatchingMap();
 		return response;
 	}
 
@@ -125,7 +152,7 @@ public class ClientRequestHandler implements Runnable {
 			this.socket.close();
 			this.hasClosedSocket = true;
 		} catch (IOException e) {
-			this.logger.error("Failed to close socket", e); //$NON-NLS-1$
+			this.jmatcherDaemon.getLogger().error("Failed to close socket", e); //$NON-NLS-1$
 		}
 	}
 

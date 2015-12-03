@@ -31,8 +31,8 @@ public class Response implements Serializable {
 	/**
 	 * 
 	 */
-	private RequestType type;
-	private String keyNumber;
+	private RequestType requestType;
+	private Integer keyNumber;
 	private InetAddress address;
 	private boolean completesRequest;
 
@@ -51,37 +51,37 @@ public class Response implements Serializable {
 	}
 
 	/**
-	 * @param type
+	 * @param requestType
 	 * @param keyNumber
 	 * @param address
 	 * @param completesRequest
 	 */
-	public Response(RequestType type, String keyNumber, InetAddress address, boolean completesRequest) {
-		this.type = type;
+	public Response(RequestType requestType, Integer keyNumber, InetAddress address, boolean completesRequest) {
+		this.requestType = requestType;
 		this.keyNumber = keyNumber;
 		this.address = address;
 		this.completesRequest = completesRequest;
 	}
 
 	/**
-	 * @return the type
+	 * @return the request type
 	 */
-	public RequestType getType() {
-		return this.type;
+	public RequestType getRequestType() {
+		return this.requestType;
 	}
 
 	/**
-	 * @param type
-	 *            the type to set
+	 * @param requestType
+	 *            the request type to set
 	 */
-	public void setType(RequestType type) {
-		this.type = type;
+	public void setRequestType(RequestType requestType) {
+		this.requestType = requestType;
 	}
 
 	/**
 	 * @return the keyNumber
 	 */
-	public String getKeyNumber() {
+	public Integer getKeyNumber() {
 		return this.keyNumber;
 	}
 
@@ -89,7 +89,7 @@ public class Response implements Serializable {
 	 * @param keyNumber
 	 *            the keyNumber to set
 	 */
-	public void setKeyNumber(String keyNumber) {
+	public void setKeyNumber(Integer keyNumber) {
 		this.keyNumber = keyNumber;
 	}
 

@@ -25,7 +25,7 @@ public class Request implements Serializable {
 	 */
 	private static final long serialVersionUID = -3101381332604600272L;
 	private RequestType type;
-	private String keyNumber;
+	private Integer keyNumber;
 
 	@SuppressWarnings("unused")
 	private Request() {
@@ -44,7 +44,7 @@ public class Request implements Serializable {
 	 * @param type
 	 * @param keyNumber
 	 */
-	public Request(RequestType type, String keyNumber) {
+	public Request(RequestType type, Integer keyNumber) {
 		this.type = type;
 		this.keyNumber = keyNumber;
 	}
@@ -67,7 +67,7 @@ public class Request implements Serializable {
 	/**
 	 * @return the keyNumber
 	 */
-	public String getKeyNumber() {
+	public Integer getKeyNumber() {
 		return this.keyNumber;
 	}
 
@@ -75,7 +75,7 @@ public class Request implements Serializable {
 	 * @param keyNumber
 	 *            the keyNumber to set
 	 */
-	public void setKeyNumber(String keyNumber) {
+	public void setKeyNumber(Integer keyNumber) {
 		this.keyNumber = keyNumber;
 	}
 }

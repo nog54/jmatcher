@@ -15,9 +15,12 @@
 package org.nognog.jmatcher;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.commons.daemon.Daemon;
 import org.apache.commons.daemon.DaemonContext;
@@ -29,17 +32,26 @@ import org.apache.logging.log4j.Logger;
  */
 public class JMatcherDaemon implements Daemon, Runnable {
 
+	private ConcurrentMap<Integer, InetAddress> matchingMap = new ConcurrentHashMap<>();
+	private int matchingMapCapacity;
+	private int boundOfKeyNumber; // exclusive
+
 	private Logger logger;
 	private ServerSocket serverSocket;
 	private Vector<ClientRequestHandler> handlers;
 	private Thread mainThread;
 	private Thread handlersManagementThread;
 	private boolean isStopping;
+	private int countOfAcceptedClient;
 
 	static final int PORT = 11600;
 
 	@Override
 	public void init(DaemonContext context) throws Exception {
+		this.matchingMap = new ConcurrentHashMap<>();
+		this.matchingMapCapacity = 1000;
+		this.boundOfKeyNumber = 100000000;
+
 		this.logger = LogManager.getLogger(JMatcherDaemon.class);
 		this.logger.info("initializing"); //$NON-NLS-1$
 		this.serverSocket = new ServerSocket(PORT);
@@ -102,15 +114,12 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	@Override
 	public void run() {
 		this.logger.info("started acceptor loop"); //$NON-NLS-1$
-
 		while (!this.isStopping) {
 			try {
 				@SuppressWarnings("resource")
 				final Socket socket = this.serverSocket.accept();
-				final StringBuilder sb = new StringBuilder();
-				sb.append(socket.getInetAddress().getHostName()).append(":").append(socket.getInetAddress().getHostAddress()); //$NON-NLS-1$
-				this.logger.info(sb.toString());
-				final ClientRequestHandler handler = new ClientRequestHandler(socket, this.logger);
+				final ClientRequestHandler handler = new ClientRequestHandler(this, socket, Integer.valueOf(this.countOfAcceptedClient));
+				this.countOfAcceptedClient++;
 				this.handlers.addElement(handler);
 				new Thread(handler).start();
 			} catch (IOException e) {
@@ -130,7 +139,6 @@ public class JMatcherDaemon implements Daemon, Runnable {
 			final ClientRequestHandler handler = (ClientRequestHandler) element;
 			handler.close();
 		}
-
 	}
 
 	/**
@@ -146,5 +154,49 @@ public class JMatcherDaemon implements Daemon, Runnable {
 
 	Vector<ClientRequestHandler> getHandlers() {
 		return this.handlers;
+	}
+
+	/**
+	 * @return the maxMapSize
+	 */
+	public int getMatchingMapCapacity() {
+		return this.matchingMapCapacity;
+	}
+
+	/**
+	 * @param mapCapacity
+	 *            the maxMapSize to set
+	 */
+	public void setMatchingMapCapacity(int mapCapacity) {
+		this.matchingMapCapacity = mapCapacity;
+	}
+
+	/**
+	 * @return the boundOfKeyNumber
+	 */
+	public int getBoundOfKeyNumber() {
+		return this.boundOfKeyNumber;
+	}
+
+	/**
+	 * @param boundOfKeyNumber
+	 *            the boundOfKeyNumber to set
+	 */
+	public void setBoundOfKeyNumber(int boundOfKeyNumber) {
+		this.boundOfKeyNumber = boundOfKeyNumber;
+	}
+
+	/**
+	 * @return map
+	 */
+	public ConcurrentMap<Integer, InetAddress> getMatchingMap() {
+		return this.matchingMap;
+	}
+
+	/**
+	 * 
+	 */
+	public void logMatchingMap() {
+		this.logger.info(this.matchingMap);
 	}
 }

@@ -15,7 +15,7 @@ allprojects {
 	apply plugin: "idea"
 	apply plugin: "java"
 	apply plugin: "maven"
-	
+
 	sourceCompatibility = 1.7
 	[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
@@ -34,6 +34,18 @@ allprojects {
 		maven { url "https://oss.sonatype.org/content/repositories/releases/" }
 		jcenter()
 	}
+
+	task sourcesJar(type: Jar, dependsOn: classes) {
+		classifier = 'sources'
+		from sourceSets.main.allSource
+	}
+
+	task javadocJar(type: Jar, dependsOn: javadoc) {
+		classifier = 'javadoc'
+		from javadoc.destinationDir
+	}
+
+	artifacts { archives javadocJar, sourcesJar }
 }
 
 project(":common") { archivesBaseName = appName + '-common' }

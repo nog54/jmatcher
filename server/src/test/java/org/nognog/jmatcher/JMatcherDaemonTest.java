@@ -22,13 +22,9 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.Vector;
 
-import org.apache.logging.log4j.Logger;
 import org.junit.Test;
-import org.nognog.jmatcher.ClientRequestHandler;
-import org.nognog.jmatcher.JMatcherDaemon;
 
 import mockit.Deencapsulation;
 import mockit.Mocked;
@@ -45,7 +41,8 @@ public class JMatcherDaemonTest {
 	 * Test method for
 	 * {@link org.nognog.jmatcher.JMatcherDaemon#init(org.apache.commons.daemon.DaemonContext)}
 	 * .
-	 * @throws Exception 
+	 * 
+	 * @throws Exception
 	 */
 	@Test
 	public final void testInit() throws Exception {
@@ -62,11 +59,11 @@ public class JMatcherDaemonTest {
 		assertThat(daemon.getLogger(), is(not(nullValue())));
 		assertThat(daemon.getHandlers(), is(not(nullValue())));
 		daemon.stop();
+		daemon.destroy();
 	}
 
 	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherDaemon#start()}.
+	 * Test method for {@link org.nognog.jmatcher.JMatcherDaemon#start()}.
 	 * 
 	 * @throws Exception
 	 */
@@ -82,7 +79,7 @@ public class JMatcherDaemonTest {
 		daemon.init(null);
 		daemon.start();
 		final Thread mainThread = Deencapsulation.getField(daemon, "mainThread"); //$NON-NLS-1$
-		final Thread manageHandlerThread = Deencapsulation.getField(daemon, "manageHandlersThread"); //$NON-NLS-1$
+		final Thread manageHandlerThread = Deencapsulation.getField(daemon, "handlersManagementThread"); //$NON-NLS-1$
 		assertThat(mainThread.isAlive(), is(true));
 		assertThat(manageHandlerThread.isAlive(), is(true));
 		assertThat(daemon.isStopping(), is(false));
@@ -91,11 +88,11 @@ public class JMatcherDaemonTest {
 		Thread.sleep(3000);
 		assertThat(mainThread.isAlive(), is(false));
 		assertThat(manageHandlerThread.isAlive(), is(false));
+		daemon.destroy();
 	}
 
 	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherDaemon#run()}.
+	 * Test method for {@link org.nognog.jmatcher.JMatcherDaemon#run()}.
 	 * 
 	 * @param handler
 	 * 
@@ -106,7 +103,7 @@ public class JMatcherDaemonTest {
 	public final void testRun(@Mocked final ClientRequestHandler handler) throws Exception {
 		new NonStrictExpectations() {
 			{
-				new ClientRequestHandler((Socket) any, (Logger) any);
+				new ClientRequestHandler((JMatcherDaemon) any, (Socket) any, (Integer) any);
 				result = handler;
 			}
 		};
@@ -124,6 +121,7 @@ public class JMatcherDaemonTest {
 			};
 		}
 		daemon.stop();
+		daemon.destroy();
 	}
 
 	/**
@@ -131,26 +129,27 @@ public class JMatcherDaemonTest {
 	 */
 	@SuppressWarnings("deprecation")
 	@Test
-	public final void testManageHandlersThread() throws Exception {
+	public final void testHandlersManagementThread() throws Exception {
 		JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
 		final Vector<ClientRequestHandler> handlers = Deencapsulation.getField(daemon, "handlers"); //$NON-NLS-1$
-		final int numberOfRequests = 100;
-		this.makeRequest(numberOfRequests);
+		final int numberOfConnects = 100;
+		this.connect(numberOfConnects);
 		Thread.sleep(1500);
 		assertThat(handlers.size(), is(0));
-		
-		final Thread manageHandlerThread = Deencapsulation.getField(daemon, "manageHandlersThread"); //$NON-NLS-1$
+
+		final Thread manageHandlerThread = Deencapsulation.getField(daemon, "handlersManagementThread"); //$NON-NLS-1$
 		manageHandlerThread.stop();
-		this.makeRequest(numberOfRequests);
+		this.connect(numberOfConnects);
 		Thread.sleep(1500);
-		assertThat(handlers.size(), is(numberOfRequests));
+		assertThat(handlers.size(), is(numberOfConnects));
 		daemon.stop();
+		daemon.destroy();
 	}
 
-	private void makeRequest(final int numberOfRequests) throws IOException, UnknownHostException {
-		for (int i = 0; i < numberOfRequests; i++) {
+	private void connect(final int numberOfConnects) throws IOException {
+		for (int i = 0; i < numberOfConnects; i++) {
 			try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) { //$NON-NLS-1$
 			}
 		}
