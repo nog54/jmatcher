@@ -14,7 +14,6 @@
 
 package org.nognog.jmatcher;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -24,24 +23,21 @@ import java.net.Socket;
 /**
  * @author goshi 2015/11/27
  */
-public class JMatcherClient implements java.io.Closeable {
+public class JMatcherClient {
 
-	private final String host;
-	private final int port;
-	private boolean isClosed;
-
-	private Socket socket;
-	private ObjectOutputStream oos;
-	private ObjectInputStream ois;
+	private String host;
+	private int port;
+	private int retryCount;
 
 	private static final int defaultPort = 11600;
+	private static final int defalutRetryCount = 2;
 
 	/**
 	 * @param host
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherClient(String host) throws IOException {
+	public JMatcherClient(String host) {
 		this(host, defaultPort);
 	}
 
@@ -51,44 +47,59 @@ public class JMatcherClient implements java.io.Closeable {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherClient(String host, int port) throws IOException {
+	public JMatcherClient(String host, int port) {
 		this.host = host;
 		this.port = port;
-		this.setupSocket();
+		this.retryCount = defalutRetryCount;
 	}
 
-	private void setupSocket() throws IOException {
-		if (this.isClosed) {
-			return;
-		}
-		this.cleanSocket();
-		this.socket = new Socket(this.host, this.port);
-		this.oos = new ObjectOutputStream(this.socket.getOutputStream());
-		this.ois = new ObjectInputStream(this.socket.getInputStream());
+	/**
+	 * @return the host
+	 */
+	public String getHost() {
+		return this.host;
 	}
 
-	private void cleanSocket() {
-		if (this.oos != null) {
-			closeClosable(this.oos);
-			this.oos = null;
-		}
-		if (this.ois != null) {
-			closeClosable(this.ois);
-			this.ois = null;
-		}
-		if (this.socket != null) {
-			closeClosable(this.socket);
-			this.socket = null;
-		}
+	/**
+	 * @param host
+	 *            the host to set
+	 */
+	public void setHost(String host) {
+		this.host = host;
 	}
 
-	private static void closeClosable(Closeable closable) {
-		try {
-			closable.close();
-		} catch (IOException e) {
-			// Just print
-			e.printStackTrace();
-		}
+	/**
+	 * @return the port
+	 */
+	public int getPort() {
+		return this.port;
+	}
+
+	/**
+	 * @param port
+	 *            the port to set
+	 */
+	public void setPort(int port) {
+		this.port = port;
+	}
+
+	/**
+	 * @return the retryCount
+	 */
+	public int getRetryCount() {
+		return this.retryCount;
+	}
+
+	/**
+	 * @param retryCount
+	 *            the retryCount to set
+	 */
+	public void setRetryCount(int retryCount) {
+		this.retryCount = retryCount;
+	}
+
+	protected void setupSocket(final Socket socket) {
+		// overridden when configure the option of sockets
 	}
 
 	/**
@@ -98,15 +109,17 @@ public class JMatcherClient implements java.io.Closeable {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public boolean makeEntry(Integer key) throws IOException {
-		if (this.isClosed) {
-			throw new RuntimeException("it has been closed"); //$NON-NLS-1$
+		try (final Socket socket = new Socket(this.host, this.port)) {
+			this.setupSocket(socket);
+			for (int i = 0; i < this.retryCount; i++) {
+				try (final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream()); final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+					return JMatcherClientUtils.makeEntry(key, oos, ois);
+				} catch (IOException e) {
+					// failed
+				}
+			}
+			throw new IOException("failed to connect to the server"); //$NON-NLS-1$
 		}
-		try {
-			return JMatcherClientUtils.makeEntry(key, this.oos, this.ois);
-		} catch (IOException e) {
-			this.setupSocket();
-		}
-		return JMatcherClientUtils.makeEntry(key, this.oos, this.ois);
 	}
 
 	/**
@@ -116,15 +129,17 @@ public class JMatcherClient implements java.io.Closeable {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public boolean cancelEntry(Integer key) throws IOException {
-		if (this.isClosed) {
-			throw new RuntimeException("it has been closed"); //$NON-NLS-1$
+		try (final Socket socket = new Socket(this.host, this.port)) {
+			this.setupSocket(socket);
+			for (int i = 0; i < this.retryCount; i++) {
+				try (final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream()); final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+					return JMatcherClientUtils.cancelEntry(key, oos, ois);
+				} catch (IOException e) {
+					// failed
+				}
+			}
+			throw new IOException("failed to connect to the server"); //$NON-NLS-1$
 		}
-		try {
-			return JMatcherClientUtils.cancelEntry(key, this.oos, this.ois);
-		} catch (IOException e) {
-			this.setupSocket();
-		}
-		return JMatcherClientUtils.cancelEntry(key, this.oos, this.ois);
 	}
 
 	/**
@@ -134,24 +149,17 @@ public class JMatcherClient implements java.io.Closeable {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public InetAddress findEntry(Integer key) throws IOException {
-		if (this.isClosed) {
-			throw new RuntimeException("it has been closed"); //$NON-NLS-1$
+		try (final Socket socket = new Socket(this.host, this.port)) {
+			this.setupSocket(socket);
+			for (int i = 0; i < this.retryCount; i++) {
+				try (final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream()); final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
+					return JMatcherClientUtils.findEntry(key, oos, ois);
+				} catch (IOException e) {
+					// failed
+				}
+			}
+			throw new IOException("failed to connect to the server"); //$NON-NLS-1$
 		}
-		try {
-			return JMatcherClientUtils.findEntry(key, this.oos, this.ois);
-		} catch (IOException e) {
-			this.setupSocket();
-		}
-		return JMatcherClientUtils.findEntry(key, this.oos, this.ois);
-	}
-
-	@Override
-	public void close() {
-		if (this.isClosed) {
-			return;
-		}
-		this.cleanSocket();
-		this.isClosed = true;
 	}
 
 }
