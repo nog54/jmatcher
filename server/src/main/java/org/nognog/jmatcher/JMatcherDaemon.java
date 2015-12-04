@@ -21,6 +21,8 @@ import java.net.Socket;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.apache.commons.daemon.Daemon;
 import org.apache.commons.daemon.DaemonContext;
@@ -32,6 +34,8 @@ import org.apache.logging.log4j.Logger;
  */
 public class JMatcherDaemon implements Daemon, Runnable {
 
+	private ExecutorService clientRequestHandlerExecutor;
+	
 	private ConcurrentMap<Integer, InetAddress> matchingMap = new ConcurrentHashMap<>();
 	private int matchingMapCapacity;
 	private int boundOfKeyNumber; // exclusive
@@ -48,12 +52,13 @@ public class JMatcherDaemon implements Daemon, Runnable {
 
 	@Override
 	public void init(DaemonContext context) throws Exception {
+		this.logger = LogManager.getLogger(JMatcherDaemon.class);
+		this.logger.info("initializing"); //$NON-NLS-1$
+		
+		this.clientRequestHandlerExecutor = Executors.newFixedThreadPool(4);
 		this.matchingMap = new ConcurrentHashMap<>();
 		this.matchingMapCapacity = 1000;
 		this.boundOfKeyNumber = 100000000;
-
-		this.logger = LogManager.getLogger(JMatcherDaemon.class);
-		this.logger.info("initializing"); //$NON-NLS-1$
 		this.serverSocket = new ServerSocket(PORT);
 		this.handlers = new Vector<>();
 		this.mainThread = new Thread(this);
@@ -103,6 +108,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 		final int waitThreadTime = 5000;
 		this.mainThread.join(waitThreadTime);
 		this.handlersManagementThread.join(waitThreadTime);
+		this.clientRequestHandlerExecutor.shutdown();
 		this.logger.info("stopped"); //$NON-NLS-1$
 	}
 
@@ -121,7 +127,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 				final ClientRequestHandler handler = new ClientRequestHandler(this, socket, Integer.valueOf(this.countOfAcceptedClient));
 				this.countOfAcceptedClient++;
 				this.handlers.addElement(handler);
-				new Thread(handler).start();
+				this.clientRequestHandlerExecutor.execute(handler);
 			} catch (IOException e) {
 				/*
 				 * Don't dump any error message if we are stopping. A

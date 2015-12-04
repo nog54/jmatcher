@@ -39,7 +39,7 @@ public class ClientRequestHandler implements Runnable {
 	private ConcurrentMap<Integer, InetAddress> matchingMap;
 	private Socket socket;
 	private boolean hasClosedSocket;
-	
+
 	/**
 	 * @param jmatcherDaemon
 	 * @param socket
@@ -56,19 +56,22 @@ public class ClientRequestHandler implements Runnable {
 
 	@Override
 	public void run() {
-		final StringBuilder sb = new StringBuilder();
-		sb.append("handler number ").append(this.number).append(" - ").append(this.socket.getInetAddress().getHostName()).append(":").append(this.socket.getInetAddress().getHostAddress()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-		this.jmatcherDaemon.getLogger().info(sb.toString());
+		try {
+			final StringBuilder sb = new StringBuilder();
+			sb.append("handler number ").append(this.number).append(" - ").append(this.socket.getInetAddress().getHostName()).append(":").append(this.socket.getInetAddress().getHostAddress()); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+			this.jmatcherDaemon.getLogger().info(sb.toString());
 
-		try (final ObjectInputStream objectInputStream = new ObjectInputStream(this.socket.getInputStream());
-				final ObjectOutputStream objectOutputStream = new ObjectOutputStream(this.socket.getOutputStream())) {
-			final Request request = (Request) objectInputStream.readObject();
-			final Response response = this.performRequest(request);
-			objectOutputStream.writeObject(response);
-		} catch (Exception e) {
-			this.jmatcherDaemon.getLogger().error("Failed to input request", e); //$NON-NLS-1$
+			try (final ObjectInputStream objectInputStream = new ObjectInputStream(this.socket.getInputStream());
+					final ObjectOutputStream objectOutputStream = new ObjectOutputStream(this.socket.getOutputStream())) {
+				final Request request = (Request) objectInputStream.readObject();
+				final Response response = this.performRequest(request);
+				objectOutputStream.writeObject(response);
+			} catch (Exception e) {
+				this.jmatcherDaemon.getLogger().error("Failed to input request", e); //$NON-NLS-1$
+			}
+		} finally {
+			this.close();
 		}
-		this.close();
 	}
 
 	/**
