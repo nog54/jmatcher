@@ -48,8 +48,6 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	private boolean isStopping;
 	private int countOfAcceptedClient;
 
-	static final int PORT = 11600;
-
 	@Override
 	public void init(DaemonContext context) throws Exception {
 		this.logger = LogManager.getLogger(JMatcherDaemon.class);
@@ -59,7 +57,7 @@ public class JMatcherDaemon implements Daemon, Runnable {
 		this.matchingMap = new ConcurrentHashMap<>();
 		this.matchingMapCapacity = 1000;
 		this.boundOfKeyNumber = 100000000;
-		this.serverSocket = new ServerSocket(PORT);
+		this.serverSocket = new ServerSocket(JMatcher.PORT);
 		this.handlers = new Vector<>();
 		this.mainThread = new Thread(this);
 		this.handlersManagementThread = new Thread(new Runnable() {

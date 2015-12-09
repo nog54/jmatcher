@@ -66,7 +66,7 @@ public class ClientRequestHandlerTest {
 
 	private void doMakeEntryTest(final JMatcherDaemon daemon) throws UnknownHostException, IOException, ClassNotFoundException {
 		for (int i = 0; i < daemon.getMatchingMapCapacity(); i++) {
-			try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 				final Response response = this.sendRequest(socket, RequestType.ENTRY);
 				assertThat(response.completesRequest(), is(true));
 				assertThat(response.getRequestType(), is(RequestType.ENTRY));
@@ -79,7 +79,7 @@ public class ClientRequestHandlerTest {
 		assertThat(map.size(), is(daemon.getMatchingMapCapacity()));
 		System.out.println(map);
 		for (int i = 0; i < 10; i++) {
-			try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 				final Response response = this.sendRequest(socket, RequestType.ENTRY);
 				assertThat(response.completesRequest(), is(false));
 				assertThat(response.getRequestType(), is(RequestType.ENTRY));
@@ -129,7 +129,7 @@ public class ClientRequestHandlerTest {
 			threads[i] = new Thread(new Runnable() {
 				@Override
 				public void run() {
-					try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+					try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 						final Response response = ClientRequestHandlerTest.this.sendRequest(socket, RequestType.ENTRY);
 						assertThat(response.completesRequest(), is(true));
 						assertThat(response.getRequestType(), is(RequestType.ENTRY));
@@ -170,7 +170,7 @@ public class ClientRequestHandlerTest {
 		final Thread cannotGetEntryThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+				try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 					final Response response = ClientRequestHandlerTest.this.sendRequest(socket, RequestType.ENTRY);
 					assertThat(response.completesRequest(), is(false));
 					assertThat(response.getRequestType(), is(RequestType.ENTRY));
@@ -212,7 +212,7 @@ public class ClientRequestHandlerTest {
 	private void doFindEntryTest(JMatcherDaemon daemon) throws Exception {
 		final int key = this.makeEntryKey();
 		for (int i = 0; i < 2; i++) {
-			try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 				final Response response = sendRequest(socket, new Request(RequestType.FIND, key));
 				assertThat(response.completesRequest(), is(true));
 				assertThat(response.getRequestType(), is(RequestType.FIND));
@@ -242,21 +242,21 @@ public class ClientRequestHandlerTest {
 	 */
 	private void doCancelEntryTest(JMatcherDaemon daemon) throws Exception {
 		final int key = this.makeEntryKey();
-		try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 			final Response response = sendRequest(socket, new Request(RequestType.CANCEL_ENTRY, key));
 			assertThat(response.completesRequest(), is(true));
 			assertThat(response.getRequestType(), is(RequestType.CANCEL_ENTRY));
 			assertThat(response.getKeyNumber(), is(key));
 			assertThat(response.getAddress(), is(not(nullValue())));
 		}
-		try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 			final Response response = sendRequest(socket, new Request(RequestType.CANCEL_ENTRY, key));
 			assertThat(response.completesRequest(), is(true));
 			assertThat(response.getRequestType(), is(RequestType.CANCEL_ENTRY));
 			assertThat(response.getKeyNumber(), is(key));
 			assertThat(response.getAddress(), is(nullValue()));
 		}
-		try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 			final Response response = sendRequest(socket, new Request(RequestType.FIND, key));
 			assertThat(response.completesRequest(), is(true));
 			assertThat(response.getRequestType(), is(RequestType.FIND));
@@ -266,7 +266,7 @@ public class ClientRequestHandlerTest {
 	}
 
 	private int makeEntryKey() throws IOException, ClassNotFoundException, UnknownHostException {
-		try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) {
+		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
 			final Response response = this.sendRequest(socket, RequestType.ENTRY);
 			return response.getKeyNumber();
 		}

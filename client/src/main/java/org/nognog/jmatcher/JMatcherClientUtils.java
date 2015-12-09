@@ -28,18 +28,17 @@ import org.nognog.jmatcher.response.Response;
  */
 public class JMatcherClientUtils {
 	/**
-	 * @param key
 	 * @param oos
 	 * @param ois
-	 * @return true if success
-	 * @throws IOException 
+	 * @return entry key number, or null is returned if failed to get entry key
+	 * @throws IOException It's thrown if failed to connect to the server
 	 */
-	public static boolean makeEntry(Integer key, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
-		final Response response = execute(key, RequestType.ENTRY, oos, ois);
+	public static Integer makeEntry(ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
+		final Response response = execute(null, RequestType.ENTRY, oos, ois);
 		if (response != null && response.completesRequest()) {
-			return true;
+			return response.getKeyNumber();
 		}
-		return false;
+		return null;
 	}
 
 	/**
@@ -47,7 +46,7 @@ public class JMatcherClientUtils {
 	 * @param oos
 	 * @param ois
 	 * @return true if success
-	 * @throws IOException 
+	 * @throws IOException It's thrown if failed to connect to the server
 	 */
 	public static boolean cancelEntry(Integer key, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
 		final Response response = execute(key, RequestType.CANCEL_ENTRY, oos, ois);
@@ -62,7 +61,7 @@ public class JMatcherClientUtils {
 	 * @param oos
 	 * @param ois
 	 * @return response
-	 * @throws IOException 
+	 * @throws IOException It's thrown if failed to connect to the server
 	 */
 	public static InetAddress findEntry(Integer key, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
 		final Response response = execute(key, RequestType.FIND, oos, ois);
@@ -78,10 +77,10 @@ public class JMatcherClientUtils {
 	 * @param oos
 	 * @param ois
 	 * @return response
-	 * @throws IOException
+	 * @throws IOException It's thrown if failed to connect to the server
 	 */
 	public static Response execute(Integer key, RequestType type, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
-		if (key == null) {
+		if (key == null && type != RequestType.ENTRY) {
 			return null;
 		}
 		oos.writeObject(new Request(type, key));

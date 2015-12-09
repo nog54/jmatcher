@@ -111,7 +111,7 @@ public class JMatcherDaemonTest {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
-		try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) { //$NON-NLS-1$
+		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) { //$NON-NLS-1$
 			Thread.sleep(100);
 			new Verifications() {
 				{
@@ -150,7 +150,7 @@ public class JMatcherDaemonTest {
 
 	private void connect(final int numberOfConnects) throws IOException {
 		for (int i = 0; i < numberOfConnects; i++) {
-			try (final Socket socket = new Socket("localhost", JMatcherDaemon.PORT)) { //$NON-NLS-1$
+			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) { //$NON-NLS-1$
 			}
 		}
 	}

@@ -28,8 +28,7 @@ public class JMatcherClient {
 	private String host;
 	private int port;
 	private int retryCount;
-
-	private static final int defaultPort = 11600;
+	
 	private static final int defalutRetryCount = 2;
 
 	/**
@@ -38,7 +37,7 @@ public class JMatcherClient {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public JMatcherClient(String host) {
-		this(host, defaultPort);
+		this(host, JMatcher.PORT);
 	}
 
 	/**
@@ -103,17 +102,16 @@ public class JMatcherClient {
 	}
 
 	/**
-	 * @param key
-	 * @return true if success
+	 * @return entry key number, or null is returned if failed to get entry key
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public boolean makeEntry(Integer key) throws IOException {
+	public Integer makeEntry() throws IOException {
 		try (final Socket socket = new Socket(this.host, this.port)) {
 			this.setupSocket(socket);
 			for (int i = 0; i < this.retryCount; i++) {
 				try (final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream()); final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())) {
-					return JMatcherClientUtils.makeEntry(key, oos, ois);
+					return JMatcherClientUtils.makeEntry(oos, ois);
 				} catch (IOException e) {
 					// failed
 				}
@@ -161,5 +159,4 @@ public class JMatcherClient {
 			throw new IOException("failed to connect to the server"); //$NON-NLS-1$
 		}
 	}
-
 }

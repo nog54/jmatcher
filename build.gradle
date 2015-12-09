@@ -52,7 +52,6 @@ project(":common") { archivesBaseName = appName + '-common' }
 
 project(":server") {
 	archivesBaseName = appName + '-server'
-
 	ext {
 		commonsDaemonVersion = '1.0.15'
 		log4jVersion = '2.4.1'

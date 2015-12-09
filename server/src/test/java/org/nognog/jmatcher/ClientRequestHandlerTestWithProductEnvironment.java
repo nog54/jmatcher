@@ -56,7 +56,7 @@ public class ClientRequestHandlerTestWithProductEnvironment {
 			threads[i] = new Thread(new Runnable() {
 				@Override
 				public void run() {
-					try (final Socket socket = new Socket(ClientRequestHandlerTestWithProductEnvironment.this.host, JMatcherDaemon.PORT)) {
+					try (final Socket socket = new Socket(ClientRequestHandlerTestWithProductEnvironment.this.host, JMatcher.PORT)) {
 						final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
 						final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
 						oos.writeObject(new Request(RequestType.ENTRY));
@@ -96,7 +96,7 @@ public class ClientRequestHandlerTestWithProductEnvironment {
 		for (Integer key : keys) {
 			// test of find request
 			for (int i = 0; i < 2; i++) {
-				try (final Socket socket = new Socket(this.host, JMatcherDaemon.PORT)) {
+				try (final Socket socket = new Socket(this.host, JMatcher.PORT)) {
 					final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
 					final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
 					oos.writeObject(new Request(RequestType.FIND, key));
@@ -108,7 +108,7 @@ public class ClientRequestHandlerTestWithProductEnvironment {
 				}
 			}
 			// cancel mapped keyNumber
-			try (final Socket socket = new Socket(this.host, JMatcherDaemon.PORT)) {
+			try (final Socket socket = new Socket(this.host, JMatcher.PORT)) {
 				final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
 				final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
 				oos.writeObject(new Request(RequestType.CANCEL_ENTRY, key));
@@ -119,7 +119,7 @@ public class ClientRequestHandlerTestWithProductEnvironment {
 				assertThat(response.getAddress(), is(not(nullValue())));
 			}
 			// cancel cancelled keyNumber
-			try (final Socket socket = new Socket(this.host, JMatcherDaemon.PORT)) {
+			try (final Socket socket = new Socket(this.host, JMatcher.PORT)) {
 				final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
 				final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
 				oos.writeObject(new Request(RequestType.CANCEL_ENTRY, key));
@@ -131,7 +131,7 @@ public class ClientRequestHandlerTestWithProductEnvironment {
 			}
 
 			// make sure that key number was cancelled
-			try (final Socket socket = new Socket(this.host, JMatcherDaemon.PORT)) {
+			try (final Socket socket = new Socket(this.host, JMatcher.PORT)) {
 				final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
 				final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
 				oos.writeObject(new Request(RequestType.FIND, key));
