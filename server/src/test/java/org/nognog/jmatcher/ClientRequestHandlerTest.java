@@ -15,8 +15,6 @@
 package org.nognog.jmatcher;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.Assert.assertThat;
@@ -28,76 +26,90 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 import org.junit.Test;
-import org.nognog.jmatcher.request.Request;
-import org.nognog.jmatcher.request.RequestType;
-import org.nognog.jmatcher.response.Response;
+import org.nognog.jmatcher.tcp.request.PlainTCPRequest;
+import org.nognog.jmatcher.tcp.request.TCPRequest;
+import org.nognog.jmatcher.tcp.response.PlainTCPResponse;
+import org.nognog.jmatcher.tcp.response.PreEntryResponse;
+import org.nognog.jmatcher.tcp.response.TCPResponse;
 
 import mockit.Deencapsulation;
-import mockit.Mocked;
-import mockit.Verifications;
 
 /**
  * @author goshi 2015/12/01
  */
-@SuppressWarnings({ "static-method", "javadoc", "nls", "boxing" })
+@SuppressWarnings({ "static-method", "nls", "boxing" })
 public class ClientRequestHandlerTest {
 
 	/**
 	 * @throws Exception
 	 */
 	@Test
-	public final void testMakeEntry() throws Exception {
+	public final void testPreEntry() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doMakeEntryTest(daemon);
-		} finally {
+			final int numberOfIterations = 1;
+			for (int i = 0; i < numberOfIterations; i++) {
+				this.doPreEntryTest(daemon);
+			}
+		} catch (Throwable t) {
+			t.printStackTrace();
+			fail();
+		}
+
+		finally {
 			daemon.stop();
 			daemon.destroy();
 		}
 	}
 
-	private void doMakeEntryTest(final JMatcherDaemon daemon) throws UnknownHostException, IOException, ClassNotFoundException {
-		for (int i = 0; i < daemon.getMatchingMapCapacity(); i++) {
-			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-				final Response response = this.sendRequest(socket, RequestType.ENTRY);
-				assertThat(response.completesRequest(), is(true));
-				assertThat(response.getRequestType(), is(RequestType.ENTRY));
-				assertThat(response.getAddress(), is(nullValue()));
-				assertThat(response.getKeyNumber(), is(greaterThanOrEqualTo(0)));
-				assertThat(response.getKeyNumber(), is(lessThan(daemon.getBoundOfKeyNumber())));
+	private void doPreEntryTest(final JMatcherDaemon daemon) throws UnknownHostException, IOException, ClassNotFoundException {
+		daemon.setBoundOfKeyNumber(JMatcherDaemon.DEFAULT_MATCHING_MAP_CAPACITY);
+		final int numberOfClients = daemon.getMatchingMapCapacity();
+		final Socket[] sockets = new Socket[numberOfClients];
+		try {
+			for (int i = 0; i < numberOfClients; i++) {
+				@SuppressWarnings("resource")
+				final Socket socket = new Socket("localhost", JMatcher.PORT);
+				sockets[i] = socket;
+				final TCPResponse response = this.sendTCPRequestAndGetResponse(socket, PlainTCPRequest.ENTRY);
+				assertThat(response instanceof PreEntryResponse, is(true));
+				PreEntryResponse entryResponse = (PreEntryResponse) response;
+				assertThat(entryResponse.getKeyNumber(), is(greaterThanOrEqualTo(0)));
+				assertThat(entryResponse.getKeyNumber(), is(lessThan(daemon.getBoundOfKeyNumber())));
 			}
-		}
-		final Map<Integer, InetAddress> map = Deencapsulation.getField(daemon, "matchingMap"); //$NON-NLS-1$
-		assertThat(map.size(), is(daemon.getMatchingMapCapacity()));
-		System.out.println(map);
-		for (int i = 0; i < 10; i++) {
-			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-				final Response response = this.sendRequest(socket, RequestType.ENTRY);
-				assertThat(response.completesRequest(), is(false));
-				assertThat(response.getRequestType(), is(RequestType.ENTRY));
-				assertThat(response.getAddress(), is(nullValue()));
-				assertThat(response.getKeyNumber(), is(nullValue()));
+			final Map<Integer, InetAddress> map = Deencapsulation.getField(daemon, "matchingMap"); //$NON-NLS-1$
+			assertThat(map.size(), is(numberOfClients));
+			for (int i = 0; i < 10; i++) {
+				try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
+					final TCPResponse response = this.sendTCPRequestAndGetResponse(socket, PlainTCPRequest.ENTRY);
+					assertThat(response == PlainTCPResponse.FAILURE, is(true));
+				}
 			}
+			this.waitForTCPConnectionTimeout();
+			assertThat(map.size(), is(0));
+		} finally {
+			this.closeSockets(sockets);
 		}
 	}
 
-	Response sendRequest(final Socket socket, RequestType type) throws IOException, ClassNotFoundException {
-		return this.sendRequest(socket, new Request(type));
-	}
-
-	Response sendRequest(final Socket socket, Request request) throws IOException, ClassNotFoundException {
+	TCPResponse sendTCPRequestAndGetResponse(final Socket socket, TCPRequest request) throws IOException, ClassNotFoundException {
 		final ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
 		final ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
+		return this.sendTCPRequestAndGetResponse(oos, ois, request);
+	}
+
+	TCPResponse sendTCPRequestAndGetResponse(ObjectOutputStream oos, ObjectInputStream ois, TCPRequest request) throws IOException, ClassNotFoundException {
 		oos.writeObject(request);
-		final Response response = (Response) ois.readObject();
+		final TCPResponse response = (TCPResponse) ois.readObject();
 		return response;
 	}
 
@@ -105,207 +117,145 @@ public class ClientRequestHandlerTest {
 	 * @throws Exception
 	 */
 	@Test
-	public final void testMakeEntryWithMultiThread() throws Exception {
+	public final void testPreEntryWithMultiThread() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doMakeEntryTestWithMultiThread(daemon);
+			final int numberOfIterations = 1;
+			for (int i = 0; i < numberOfIterations; i++) {
+				this.doPreEntryTestWithMultiThread(daemon);
+			}
+		} catch (Throwable t) {
+			t.printStackTrace();
+			fail();
 		} finally {
 			daemon.stop();
 			daemon.destroy();
 		}
 	}
 
-	private void doMakeEntryTestWithMultiThread(final JMatcherDaemon daemon) {
-		daemon.setBoundOfKeyNumber(1000);
-		final int numberOfClients = 1000;
+	private void doPreEntryTestWithMultiThread(final JMatcherDaemon daemon) {
+		daemon.setBoundOfKeyNumber(JMatcherDaemon.DEFAULT_MATCHING_MAP_CAPACITY);
+		final int numberOfClients = JMatcherDaemon.DEFAULT_MATCHING_MAP_CAPACITY;
 		daemon.setMatchingMapCapacity(numberOfClients);
 		Thread[] threads = new Thread[numberOfClients];
-		final Thread mainThread = Thread.currentThread();
+		final Set<Socket> sockets = new HashSet<>();
 		final Set<Thread> socketExceptionThreads = new HashSet<>();
 		final Set<Thread> failedThreads = new HashSet<>();
 		for (int i = 0; i < numberOfClients; i++) {
-			threads[i] = new Thread(new Runnable() {
-				@Override
-				public void run() {
-					try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-						final Response response = ClientRequestHandlerTest.this.sendRequest(socket, RequestType.ENTRY);
-						assertThat(response.completesRequest(), is(true));
-						assertThat(response.getRequestType(), is(RequestType.ENTRY));
-						assertThat(response.getAddress(), is(nullValue()));
-						assertThat(response.getKeyNumber(), is(greaterThanOrEqualTo(0)));
-						assertThat(response.getKeyNumber(), is(lessThan(daemon.getBoundOfKeyNumber())));
-					} catch (SocketException e) {
-						synchronized (socketExceptionThreads) {
-							socketExceptionThreads.add(Thread.currentThread());
-						}
-						mainThread.interrupt();
-					} catch (AssertionError | Exception e) {
-						failedThreads.add(Thread.currentThread());
-						e.printStackTrace();
-						mainThread.interrupt();
-					}
-				}
-			});
+			threads[i] = this.createEntryRequestClientThread(daemon, sockets, socketExceptionThreads, failedThreads);
 			threads[i].start();
 		}
-		Set<Thread> endThreads = new HashSet<>();
-		while (endThreads.size() != numberOfClients) {
-			for (Thread t : threads) {
-				try {
-					t.join();
-					endThreads.add(t);
-				} catch (InterruptedException e) {
-					continue;
-				}
-			}
-		}
+		this.waitAllClientThreads(threads);
 		System.out.println("socketExceptionThreadsCount = " + socketExceptionThreads.size());
 		System.out.println("failedThreadsCount = " + failedThreads.size());
 		assertThat(failedThreads.size(), is(0));
-
+		final Map<Integer, InetAddress> map = Deencapsulation.getField(daemon, "matchingMap"); //$NON-NLS-1$
+		assertThat(map.size(), is(numberOfClients - socketExceptionThreads.size()));
 		daemon.setMatchingMapCapacity(daemon.getMatchingMapCapacity() - socketExceptionThreads.size());
+		final Thread cannotGetEntryThread = this.craeteCannotGetEntryClientThread();
+		cannotGetEntryThread.start();
+		try {
+			// it might throw InterruptedException
+			cannotGetEntryThread.join();
+		} catch (InterruptedException e) {
+			fail();
+		}
+		this.waitForTCPConnectionTimeout();
+		assertThat(map.size(), is(0));
+		this.closeSockets(sockets);
+	}
 
-		final Thread cannotGetEntryThread = new Thread(new Runnable() {
+	private Thread createEntryRequestClientThread(final JMatcherDaemon daemon, final Set<Socket> sockets, final Set<Thread> socketExceptionThreads, final Set<Thread> failedThreads) {
+		return new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					@SuppressWarnings("resource")
+					final Socket socket = new Socket("localhost", JMatcher.PORT);
+					sockets.add(socket);
+					final TCPResponse response = sendTCPRequestAndGetResponse(socket, PlainTCPRequest.ENTRY);
+					assertThat(response instanceof PreEntryResponse, is(true));
+					PreEntryResponse entryResponse = (PreEntryResponse) response;
+					assertThat(entryResponse.getKeyNumber(), is(greaterThanOrEqualTo(0)));
+					assertThat(entryResponse.getKeyNumber(), is(lessThan(daemon.getBoundOfKeyNumber())));
+				} catch (SocketException e) {
+					synchronized (socketExceptionThreads) {
+						socketExceptionThreads.add(Thread.currentThread());
+					}
+				} catch (SocketTimeoutException e) {
+					failedThreads.add(Thread.currentThread());
+					System.err.println("Time out occured when trying to read object in createEntryRequestClientThread");
+				} catch (AssertionError | Exception e) {
+					failedThreads.add(Thread.currentThread());
+					e.printStackTrace();
+				}
+			}
+		});
+	}
+
+	private Thread craeteCannotGetEntryClientThread() {
+		final Thread mainThread = Thread.currentThread();
+		return new Thread(new Runnable() {
 			@Override
 			public void run() {
 				try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-					final Response response = ClientRequestHandlerTest.this.sendRequest(socket, RequestType.ENTRY);
-					assertThat(response.completesRequest(), is(false));
-					assertThat(response.getRequestType(), is(RequestType.ENTRY));
-					assertThat(response.getAddress(), is(nullValue()));
-					assertThat(response.getKeyNumber(), is(nullValue()));
+					final TCPResponse response = sendTCPRequestAndGetResponse(socket, PlainTCPRequest.ENTRY);
+					assertThat(response == PlainTCPResponse.FAILURE, is(true));
+				} catch (SocketTimeoutException e) {
+					System.err.println("Time out occured when trying to read object in createCannotGetEntryClientThread");
+					mainThread.interrupt();
 				} catch (Throwable t) {
 					t.printStackTrace();
 					mainThread.interrupt();
 				}
 			}
 		});
-		cannotGetEntryThread.start();
-
-		try {
-			cannotGetEntryThread.join();
-		} catch (InterruptedException e) {
-			fail();
-		}
 	}
 
-	@Test
-	public final void testFindEntry() throws Exception {
-		final JMatcherDaemon daemon = new JMatcherDaemon();
-		daemon.init(null);
-		daemon.start();
-		try {
-			this.doFindEntryTest(daemon);
-		} finally {
-			daemon.stop();
-			daemon.destroy();
-		}
-	}
-
-	/**
-	 * @param daemon
-	 * @throws IOException
-	 * @throws UnknownHostException
-	 */
-	private void doFindEntryTest(JMatcherDaemon daemon) throws Exception {
-		final int key = this.makeEntryKey();
-		for (int i = 0; i < 2; i++) {
-			try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-				final Response response = sendRequest(socket, new Request(RequestType.FIND, key));
-				assertThat(response.completesRequest(), is(true));
-				assertThat(response.getRequestType(), is(RequestType.FIND));
-				assertThat(response.getKeyNumber(), is(key));
-				assertThat(response.getAddress(), is(not(nullValue())));
+	private void waitAllClientThreads(Thread[] threads) {
+		for (Thread t : threads) {
+			try {
+				t.join();
+			} catch (InterruptedException e) {
+				fail();
 			}
 		}
 	}
 
-	@Test
-	public final void testCancelEntry() throws Exception {
-		final JMatcherDaemon daemon = new JMatcherDaemon();
-		daemon.init(null);
-		daemon.start();
-		try {
-			this.doCancelEntryTest(daemon);
-		} finally {
-			daemon.stop();
-			daemon.destroy();
-		}
-	}
-
 	/**
-	 * @param daemon
-	 * @throws IOException
-	 * @throws UnknownHostException
-	 */
-	private void doCancelEntryTest(JMatcherDaemon daemon) throws Exception {
-		final int key = this.makeEntryKey();
-		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-			final Response response = sendRequest(socket, new Request(RequestType.CANCEL_ENTRY, key));
-			assertThat(response.completesRequest(), is(true));
-			assertThat(response.getRequestType(), is(RequestType.CANCEL_ENTRY));
-			assertThat(response.getKeyNumber(), is(key));
-			assertThat(response.getAddress(), is(not(nullValue())));
-		}
-		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-			final Response response = sendRequest(socket, new Request(RequestType.CANCEL_ENTRY, key));
-			assertThat(response.completesRequest(), is(true));
-			assertThat(response.getRequestType(), is(RequestType.CANCEL_ENTRY));
-			assertThat(response.getKeyNumber(), is(key));
-			assertThat(response.getAddress(), is(nullValue()));
-		}
-		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-			final Response response = sendRequest(socket, new Request(RequestType.FIND, key));
-			assertThat(response.completesRequest(), is(true));
-			assertThat(response.getRequestType(), is(RequestType.FIND));
-			assertThat(response.getKeyNumber(), is(key));
-			assertThat(response.getAddress(), is(nullValue()));
-		}
-	}
-
-	private int makeEntryKey() throws IOException, ClassNotFoundException, UnknownHostException {
-		try (final Socket socket = new Socket("localhost", JMatcher.PORT)) {
-			final Response response = this.sendRequest(socket, RequestType.ENTRY);
-			return response.getKeyNumber();
-		}
-	}
-
-	/**
-	 * Test method for {@link org.nognog.jmatcher.ClientRequestHandler#close()}.
 	 * 
-	 * @throws Exception
 	 */
-	@SuppressWarnings("unused")
-	@Test
-	public final void testClose(@Mocked final JMatcherDaemon daemon, @Mocked final Socket socket) throws Exception {
-		final ClientRequestHandler ch = new ClientRequestHandler(daemon, socket, 0);
+	private void waitForTCPConnectionTimeout() {
+		try {
+			Thread.sleep(TCPClientRequestHandler.WAIT_TIME_FOR_UDP_ENTRY + 1000);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
 
-		assertThat(ch.hasClosedSocket(), is(false));
-		new Verifications() {
-			{
-				socket.close();
-				times = 0;
+	private void closeSockets(Set<Socket> sockets) {
+		for (Socket socket : sockets) {
+			if (socket != null) {
+				try {
+					socket.close();
+				} catch (Exception e) {
+					// nothing to do
+				}
 			}
-		};
+		}
+	}
 
-		ch.close();
-
-		assertThat(ch.hasClosedSocket(), is(true));
-		new Verifications() {
-			{
-				socket.close();
-				times = 1;
+	private void closeSockets(Socket[] sockets) {
+		for (Socket socket : sockets) {
+			if (socket != null) {
+				try {
+					socket.close();
+				} catch (Exception e) {
+					// nothing to do
+				}
 			}
-		};
-		ch.close();
-		assertThat(ch.hasClosedSocket(), is(true));
-		new Verifications() {
-			{
-				socket.close();
-				times = 1;
-			}
-		};
+		}
 	}
 }

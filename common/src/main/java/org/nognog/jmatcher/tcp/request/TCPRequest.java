@@ -12,15 +12,13 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.tcp.request;
+
+import java.io.Serializable;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi 2015/11/25
  */
-public class JMatcher {
-	/**
-	 * port number which jmathcer uses
-	 */
-	public static final int PORT = 55654;
-
+public interface TCPRequest extends Serializable {
+	// just marker
 }

@@ -14,13 +14,9 @@
 
 package org.nognog.jmatcher;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -32,69 +28,55 @@ import org.apache.logging.log4j.Logger;
 /**
  * @author goshi 2015/10/28
  */
-public class JMatcherDaemon implements Daemon, Runnable {
+public class JMatcherDaemon implements Daemon {
+	/**
+	 * default bound of key number exclusive this number (max key number =
+	 * {@link #DEFAULT_BOUND_OF_KEY_NUMBER} - 1)
+	 */
+	public static final int DEFAULT_BOUND_OF_KEY_NUMBER = 100000000;
 
-	private ExecutorService clientRequestHandlerExecutor;
+	/**
+	 * The default of the capacity of matching map.
+	 */
+	public static final int DEFAULT_MATCHING_MAP_CAPACITY = 512;
 	
-	private ConcurrentMap<Integer, InetAddress> matchingMap = new ConcurrentHashMap<>();
+	/**
+	 * UDP buffer size
+	 */
+	public static final int UDP_BUFFER_SIZE = 12; // should be 16?
+
+	private ExecutorService executorService;
+
+	private ConcurrentMap<Integer, Host> matchingMap;
+	private ConcurrentMap<Integer, CopyOnWriteArraySet<RequestingConnectionHostHandler>> waitingForSyncHandlersMap;
 	private int matchingMapCapacity;
 	private int boundOfKeyNumber; // exclusive
 
 	private Logger logger;
-	private ServerSocket serverSocket;
-	private Vector<ClientRequestHandler> handlers;
-	private Thread mainThread;
-	private Thread handlersManagementThread;
+	private TCPServerThread tcpServerThread;
+	private UDPServerThread udpServerThread;
 	private boolean isStopping;
-	private int countOfAcceptedClient;
 
 	@Override
 	public void init(DaemonContext context) throws Exception {
 		this.logger = LogManager.getLogger(JMatcherDaemon.class);
 		this.logger.info("initializing"); //$NON-NLS-1$
-		
-		this.clientRequestHandlerExecutor = Executors.newFixedThreadPool(4);
+
+		this.executorService = Executors.newCachedThreadPool();
 		this.matchingMap = new ConcurrentHashMap<>();
-		this.matchingMapCapacity = 1000;
-		this.boundOfKeyNumber = 100000000;
-		this.serverSocket = new ServerSocket(JMatcher.PORT);
-		this.handlers = new Vector<>();
-		this.mainThread = new Thread(this);
-		this.handlersManagementThread = new Thread(new Runnable() {
-
-			@Override
-			public void run() {
-				final long interval = 1000; // 1 sec
-				while (!JMatcherDaemon.this.isStopping()) {
-					try {
-						Thread.sleep(interval);
-						this.freeHandlers();
-					} catch (InterruptedException e) {
-						if (!JMatcherDaemon.this.isStopping()) {
-							JMatcherDaemon.this.getLogger().error("Handlers management Thread : error occured", e); //$NON-NLS-1$
-						}
-					}
-				}
-			}
-
-			private void freeHandlers() {
-				final Object[] elements = JMatcherDaemon.this.getHandlers().toArray();
-				for (Object element : elements) {
-					final ClientRequestHandler handler = (ClientRequestHandler) element;
-					if (handler.hasClosedSocket()) {
-						JMatcherDaemon.this.getHandlers().remove(element);
-					}
-				}
-			}
-		});
+		this.waitingForSyncHandlersMap = new ConcurrentHashMap<>();
+		this.matchingMapCapacity = DEFAULT_MATCHING_MAP_CAPACITY;
+		this.boundOfKeyNumber = DEFAULT_BOUND_OF_KEY_NUMBER;
+		this.tcpServerThread = new TCPServerThread(this);
+		this.udpServerThread = new UDPServerThread(this);
 		this.logger.info("initialized"); //$NON-NLS-1$
 	}
 
 	@Override
 	public void start() {
 		this.logger.info("starting"); //$NON-NLS-1$
-		this.mainThread.start();
-		this.handlersManagementThread.start();
+		this.tcpServerThread.start();
+		this.udpServerThread.start();
 		this.logger.info("started"); //$NON-NLS-1$
 	}
 
@@ -102,11 +84,12 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	public void stop() throws Exception {
 		this.logger.info("stopping"); //$NON-NLS-1$
 		this.isStopping = true;
-		this.serverSocket.close();
 		final int waitThreadTime = 5000;
-		this.mainThread.join(waitThreadTime);
-		this.handlersManagementThread.join(waitThreadTime);
-		this.clientRequestHandlerExecutor.shutdown();
+		this.tcpServerThread.closeSocket();
+		this.udpServerThread.closeSocket();
+		this.tcpServerThread.join(waitThreadTime);
+		this.udpServerThread.join(waitThreadTime);
+		this.executorService.shutdown();
 		this.logger.info("stopped"); //$NON-NLS-1$
 	}
 
@@ -115,49 +98,11 @@ public class JMatcherDaemon implements Daemon, Runnable {
 		this.logger.info("destroyed"); //$NON-NLS-1$
 	}
 
-	@Override
-	public void run() {
-		this.logger.info("started acceptor loop"); //$NON-NLS-1$
-		while (!this.isStopping) {
-			try {
-				@SuppressWarnings("resource")
-				final Socket socket = this.serverSocket.accept();
-				final ClientRequestHandler handler = new ClientRequestHandler(this, socket, Integer.valueOf(this.countOfAcceptedClient));
-				this.countOfAcceptedClient++;
-				this.handlers.addElement(handler);
-				this.clientRequestHandlerExecutor.execute(handler);
-			} catch (IOException e) {
-				/*
-				 * Don't dump any error message if we are stopping. A
-				 * IOException is generated when the ServerSocket is closed in
-				 * stop()
-				 */
-				if (!this.isStopping) {
-					this.logger.error("Acceptor loop thread : error occured", e); //$NON-NLS-1$
-				}
-			}
-		}
-
-		final Object[] elements = this.handlers.toArray();
-		for (Object element : elements) {
-			final ClientRequestHandler handler = (ClientRequestHandler) element;
-			handler.close();
-		}
-	}
-
 	/**
 	 * @return true if this is stopping
 	 */
 	boolean isStopping() {
 		return this.isStopping;
-	}
-
-	Logger getLogger() {
-		return this.logger;
-	}
-
-	Vector<ClientRequestHandler> getHandlers() {
-		return this.handlers;
 	}
 
 	/**
@@ -191,10 +136,24 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	}
 
 	/**
-	 * @return map
+	 * @return the matchingMap
 	 */
-	public ConcurrentMap<Integer, InetAddress> getMatchingMap() {
+	public ConcurrentMap<Integer, Host> getMatchingMap() {
 		return this.matchingMap;
+	}
+
+	/**
+	 * @return the executorService
+	 */
+	public ExecutorService getExecutorService() {
+		return this.executorService;
+	}
+
+	/**
+	 * @return the waitingForSyncHandlersMap
+	 */
+	public ConcurrentMap<Integer, CopyOnWriteArraySet<RequestingConnectionHostHandler>> getWaitingHandlersMap() {
+		return this.waitingForSyncHandlersMap;
 	}
 
 	/**
@@ -202,5 +161,12 @@ public class JMatcherDaemon implements Daemon, Runnable {
 	 */
 	public void logMatchingMap() {
 		this.logger.info(this.matchingMap);
+	}
+
+	/**
+	 * 
+	 */
+	public void logWaitingForSyncHandlersMap() {
+		this.logger.info(this.waitingForSyncHandlersMap);
 	}
 }

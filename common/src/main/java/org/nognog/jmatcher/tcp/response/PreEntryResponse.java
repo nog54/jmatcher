@@ -12,56 +12,24 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher.request;
-
-import java.io.Serializable;
+package org.nognog.jmatcher.tcp.response;
 
 /**
- * @author goshi 2015/11/25
+ * @author goshi 2015/12/19
  */
-public class Request implements Serializable {
+public class PreEntryResponse implements TCPResponse {
+
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = -3101381332604600272L;
-	private RequestType type;
+	private static final long serialVersionUID = -5312526273450906414L;
 	private Integer keyNumber;
 
-	@SuppressWarnings("unused")
-	private Request() {
-		// to serializable
-		this(null, null);
-	}
-
 	/**
-	 * @param type
-	 */
-	public Request(RequestType type) {
-		this(type, null);
-	}
-
-	/**
-	 * @param type
 	 * @param keyNumber
 	 */
-	public Request(RequestType type, Integer keyNumber) {
-		this.type = type;
+	public PreEntryResponse(Integer keyNumber) {
 		this.keyNumber = keyNumber;
-	}
-
-	/**
-	 * @return the type
-	 */
-	public RequestType getType() {
-		return this.type;
-	}
-
-	/**
-	 * @param type
-	 *            the type to set
-	 */
-	public void setType(RequestType type) {
-		this.type = type;
 	}
 
 	/**
@@ -78,4 +46,5 @@ public class Request implements Serializable {
 	public void setKeyNumber(Integer keyNumber) {
 		this.keyNumber = keyNumber;
 	}
+
 }

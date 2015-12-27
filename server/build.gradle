@@ -8,10 +8,10 @@ jar {
 // https://gradle-ssh-plugin.github.io/
 remotes {
 	jsvcServer {
-		host = '***'
-		user = '***'
+		host = 'nog-jserver1.servehttp.com'
+		user = 'ec2-user'
 		knownHosts = allowAnyHosts
-		identity = file('***')
+		identity = file('/Users/goshi/.ssh/GoshiNoguchi_tokyo.pem')
 	}
 }
 

@@ -14,82 +14,76 @@
 
 package org.nognog.jmatcher;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.net.InetAddress;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 
-import org.nognog.jmatcher.request.Request;
-import org.nognog.jmatcher.request.RequestType;
-import org.nognog.jmatcher.response.Response;
+import org.nognog.jmatcher.udp.request.UDPRequest;
+import org.nognog.jmatcher.udp.request.UDPRequestSerializer;
+import org.nognog.jmatcher.udp.response.UDPResponse;
+import org.nognog.jmatcher.udp.response.UDPResponseSerializer;
 
 /**
- * @author goshi 2015/11/30
+ * @author goshi 2015/12/27
  */
+@SuppressWarnings("javadoc")
 public class JMatcherClientUtils {
-	/**
-	 * @param oos
-	 * @param ois
-	 * @return entry key number, or null is returned if failed to get entry key
-	 * @throws IOException It's thrown if failed to connect to the server
-	 */
-	public static Integer makeEntry(ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
-		final Response response = execute(null, RequestType.ENTRY, oos, ois);
-		if (response != null && response.completesRequest()) {
-			return response.getKeyNumber();
-		}
-		return null;
+
+	public static void sendUDPRequest(DatagramSocket datagramSocket, UDPRequest request, SocketAddress address) throws IOException {
+		final String serializedRequest = UDPRequestSerializer.getInstance().serialize(request);
+		sendUDPPacket(datagramSocket, serializedRequest, address);
 	}
 
-	/**
-	 * @param key
-	 * @param oos
-	 * @param ois
-	 * @return true if success
-	 * @throws IOException It's thrown if failed to connect to the server
-	 */
-	public static boolean cancelEntry(Integer key, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
-		final Response response = execute(key, RequestType.CANCEL_ENTRY, oos, ois);
-		if (response != null && response.completesRequest()) {
-			return true;
-		}
-		return false;
+	public static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessage message, Host host) throws IOException {
+		sendUDPPacket(datagramSocket, message.toString(), new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
 
-	/**
-	 * @param key
-	 * @param oos
-	 * @param ois
-	 * @return response
-	 * @throws IOException It's thrown if failed to connect to the server
-	 */
-	public static InetAddress findEntry(Integer key, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
-		final Response response = execute(key, RequestType.FIND, oos, ois);
-		if (response != null && response.completesRequest()) {
-			return response.getAddress();
-		}
-		return null;
+	public static void sendUDPPacket(DatagramSocket datagramSocket, String message, SocketAddress address) throws IOException {
+		final byte[] buf = message.getBytes();
+		final DatagramPacket packet = new DatagramPacket(buf, buf.length, address);
+		datagramSocket.send(packet);
 	}
 
-	/**
-	 * @param key
-	 * @param type
-	 * @param oos
-	 * @param ois
-	 * @return response
-	 * @throws IOException It's thrown if failed to connect to the server
-	 */
-	public static Response execute(Integer key, RequestType type, ObjectOutputStream oos, ObjectInputStream ois) throws IOException {
-		if (key == null && type != RequestType.ENTRY) {
-			return null;
+	public static UDPResponse receiveUDPResponse(DatagramSocket socket, int buffSize) throws IOException {
+		return UDPResponseSerializer.getInstance().deserialize(receiveUDPMessage(socket, buffSize));
+	}
+
+	public static String receiveUDPMessage(DatagramSocket socket, int buffSize) throws IOException {
+		final DatagramPacket packet = receiveUDPPacket(socket, buffSize);
+		final String result = new String(packet.getData(), 0, packet.getLength());
+		return result;
+	}
+
+	public static DatagramPacket receiveUDPPacket(DatagramSocket socket, int buffSize) throws IOException {
+		final byte[] buf = new byte[buffSize];
+		final DatagramPacket packet = new DatagramPacket(buf, buf.length);
+		socket.receive(packet);
+		return packet;
+	}
+
+	public static JMatcherClientMessage getMessageFrom(DatagramPacket packet) {
+		return JMatcherClientMessage.valueOf(new String(packet.getData(), 0, packet.getLength()));
+	}
+
+	public static boolean packetCameFrom(Host host, DatagramPacket packet) {
+		return packetCameFrom(new InetSocketAddress(host.getAddress(), host.getPort()), packet);
+	}
+
+	public static boolean packetCameFrom(InetSocketAddress hostAddress, DatagramPacket packet) {
+		return hostAddress.getAddress().equals(packet.getAddress()) && hostAddress.getPort() == packet.getPort();
+	}
+
+	public static void close(Closeable closeable) {
+		if (closeable == null) {
+			return;
 		}
-		oos.writeObject(new Request(type, key));
-		oos.flush();
 		try {
-			return (Response) ois.readObject();
-		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
+			closeable.close();
+		} catch (IOException e) {
+			// ignore
 		}
-		return null;
 	}
 }

@@ -15,12 +15,9 @@
 package org.nognog.jmatcher;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi 2015/12/27
  */
-public class JMatcher {
-	/**
-	 * port number which jmathcer uses
-	 */
-	public static final int PORT = 55654;
-
+@SuppressWarnings("javadoc")
+public enum JMatcherClientMessage {
+	CONNECT, CONNECTED, CANCEL, CANCELLED
 }

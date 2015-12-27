@@ -12,15 +12,12 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.tcp.response;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi 2015/12/21
  */
-public class JMatcher {
-	/**
-	 * port number which jmathcer uses
-	 */
-	public static final int PORT = 55654;
-
+@SuppressWarnings("javadoc")
+public enum PlainTCPResponse implements TCPResponse {
+	COMPLETE_ENTRY, FAILURE
 }

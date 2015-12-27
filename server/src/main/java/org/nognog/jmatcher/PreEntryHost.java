@@ -15,12 +15,22 @@
 package org.nognog.jmatcher;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi
+ * 2015/12/24
  */
-public class JMatcher {
+public class PreEntryHost extends Host{
+
 	/**
-	 * port number which jmathcer uses
+	 * 
 	 */
-	public static final int PORT = 55654;
+	private static final long serialVersionUID = 5090773062924902151L;
+
+	/**
+	 * @param address
+	 * @param port
+	 */
+	public PreEntryHost(String address, int port) {
+		super(address, port);
+	}
 
 }

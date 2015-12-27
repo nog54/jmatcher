@@ -12,15 +12,30 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.udp.request;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi 2015/12/21
  */
-public class JMatcher {
-	/**
-	 * port number which jmathcer uses
-	 */
-	public static final int PORT = 55654;
+public class ConnectionRequest implements UDPRequest {
 
+	private Integer keyNumber;
+
+	/**
+	 * @param keyNumber
+	 * 
+	 */
+	public ConnectionRequest(Integer keyNumber) {
+		this.keyNumber = keyNumber;
+	}
+
+	@Override
+	public Integer getKeyNumber() {
+		return this.keyNumber;
+	}
+
+	@Override
+	public void setKeyNumber(Integer keyNumber) {
+		this.keyNumber = keyNumber;
+	}
 }

@@ -12,15 +12,37 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.udp.response;
+
+import org.nognog.jmatcher.Host;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi 2015/12/19
  */
-public class JMatcher {
+public class ConnectionResponse implements UDPResponse {
+
+	private Host host;
+
 	/**
-	 * port number which jmathcer uses
+	 * @param host
 	 */
-	public static final int PORT = 55654;
+	public ConnectionResponse(Host host) {
+		this.host = host;
+	}
+
+	/**
+	 * @return the host
+	 */
+	public Host getHost() {
+		return this.host;
+	}
+
+	/**
+	 * @param host
+	 *            the host to set
+	 */
+	public void setHost(Host host) {
+		this.host = host;
+	}
 
 }

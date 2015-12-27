@@ -12,12 +12,30 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher.request;
+package org.nognog.jmatcher.udp.request;
 
 /**
- * @author goshi 2015/11/25
+ * @author goshi 2015/12/21
  */
-@SuppressWarnings("javadoc")
-public enum RequestType {
-	ENTRY, CANCEL_ENTRY, FIND
+public class EnableEntryRequest implements UDPRequest {
+
+	private Integer keyNumber;
+
+	/**
+	 * @param keyNumber
+	 * 
+	 */
+	public EnableEntryRequest(Integer keyNumber) {
+		this.keyNumber = keyNumber;
+	}
+
+	@Override
+	public Integer getKeyNumber() {
+		return this.keyNumber;
+	}
+
+	@Override
+	public void setKeyNumber(Integer keyNumber) {
+		this.keyNumber = keyNumber;
+	}
 }

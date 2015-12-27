@@ -15,12 +15,35 @@
 package org.nognog.jmatcher;
 
 /**
- * @author goshi 2015/12/09
+ * @author goshi 2015/12/20
  */
-public class JMatcher {
-	/**
-	 * port number which jmathcer uses
-	 */
-	public static final int PORT = 55654;
+public class RequestingConnectionHostHandler {
+	private final Thread thread;
+	private final Host host;
 
+	/**
+	 * @param thread
+	 * @param host
+	 */
+	public RequestingConnectionHostHandler(Thread thread, Host host) {
+		if (thread == null || host == null) {
+			throw new IllegalArgumentException();
+		}
+		this.thread = thread;
+		this.host = host;
+	}
+
+	/**
+	 * @return the thread
+	 */
+	public Thread getThread() {
+		return this.thread;
+	}
+
+	/**
+	 * @return the host
+	 */
+	public Host getHost() {
+		return this.host;
+	}
 }
