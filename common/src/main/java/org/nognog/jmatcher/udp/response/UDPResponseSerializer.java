@@ -25,6 +25,8 @@ import org.nognog.jmatcher.Host;
 public class UDPResponseSerializer {
 	private static final UDPResponseSerializer instance = new UDPResponseSerializer();
 
+	private static final String noValueConnectionResponse = ""; //$NON-NLS-1$
+
 	private UDPResponseSerializer() {
 	}
 
@@ -44,13 +46,13 @@ public class UDPResponseSerializer {
 		try {
 			final ConnectionResponse connectionResponse = (ConnectionResponse) udpResponse;
 			if (connectionResponse.getHost().getAddress() == null) {
-				return null;
+				return noValueConnectionResponse;
 			}
 			final StringBuilder sb = new StringBuilder();
 			sb.append(connectionResponse.getHost());
 			return sb.toString();
 		} catch (Exception e) {
-			return null;
+			return noValueConnectionResponse;
 		}
 	}
 
@@ -60,6 +62,9 @@ public class UDPResponseSerializer {
 	 */
 	@SuppressWarnings("static-method")
 	public UDPResponse deserialize(String serializedRequest) {
+		if (serializedRequest.equals(noValueConnectionResponse)) {
+			return new ConnectionResponse(null);
+		}
 		try {
 			final int colonIndex = serializedRequest.indexOf(":"); //$NON-NLS-1$
 			final String address = serializedRequest.substring(0, colonIndex);

@@ -52,7 +52,7 @@ public class UDPClientRequestHandler implements Runnable {
 	/**
 	 * 
 	 */
-	public static final int WAIT_TIME_FOR_MATCHING_TIMING = 5000; //
+	public static final int WAIT_TIME_FOR_MATCHING_TIMING = 5000; // 
 
 	/**
 	 * @param jmatcherDaemon
@@ -110,19 +110,22 @@ public class UDPClientRequestHandler implements Runnable {
 	private void handleConnectionRequest(ConnectionRequest request) throws IOException {
 		final Host targetHost = this.matchingMap.get(request.getKeyNumber());
 		if (targetHost == null || targetHost instanceof PreEntryHost) {
+			this.sendResponse(new ConnectionResponse(null));
 			return;
 		}
 		final Integer connectionTargetKeyNumber = this.getRealKeyNumber(request.getKeyNumber());
 		if (connectionTargetKeyNumber == null) {
+			this.sendResponse(new ConnectionResponse(null));
 			return;
 		}
 		try {
 			this.waitToMatchConnectionTiming(connectionTargetKeyNumber);
 		} catch (TimeoutException e) {
+			this.sendResponse(new ConnectionResponse(null));
 			return;
 		}
-		final ConnectionResponse result = new ConnectionResponse(targetHost);
-		this.sendResponse(result);
+
+		this.sendResponse(new ConnectionResponse(targetHost));
 	}
 
 	/**

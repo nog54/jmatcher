@@ -30,14 +30,14 @@ import org.nognog.jmatcher.udp.response.UDPResponseSerializer;
  * @author goshi 2015/12/27
  */
 @SuppressWarnings("javadoc")
-public class JMatcherClientUtils {
+public class JMatcherClientUtil {
 
-	public static void sendUDPRequest(DatagramSocket datagramSocket, UDPRequest request, SocketAddress address) throws IOException {
+	static void sendUDPRequest(DatagramSocket datagramSocket, UDPRequest request, SocketAddress address) throws IOException {
 		final String serializedRequest = UDPRequestSerializer.getInstance().serialize(request);
 		sendUDPPacket(datagramSocket, serializedRequest, address);
 	}
 
-	public static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessage message, Host host) throws IOException {
+	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessage message, Host host) throws IOException {
 		sendUDPPacket(datagramSocket, message.toString(), new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
 
@@ -47,7 +47,7 @@ public class JMatcherClientUtils {
 		datagramSocket.send(packet);
 	}
 
-	public static UDPResponse receiveUDPResponse(DatagramSocket socket, int buffSize) throws IOException {
+	static UDPResponse receiveUDPResponse(DatagramSocket socket, int buffSize) throws IOException {
 		return UDPResponseSerializer.getInstance().deserialize(receiveUDPMessage(socket, buffSize));
 	}
 
@@ -64,7 +64,7 @@ public class JMatcherClientUtils {
 		return packet;
 	}
 
-	public static JMatcherClientMessage getMessageFrom(DatagramPacket packet) {
+	static JMatcherClientMessage getMessageFrom(DatagramPacket packet) {
 		return JMatcherClientMessage.valueOf(new String(packet.getData(), 0, packet.getLength()));
 	}
 
