@@ -53,7 +53,7 @@ public class JMatcherEntryClient {
 
 	private Set<Host> requestingHosts;
 	private Map<Host, InetSocketAddress> addresses;
-	private Set<Host> connectedHosts;
+	private Set<Host> connectingHosts;
 
 	static final int defalutRetryCount = 2;
 	static final int buffSize = 128;
@@ -80,7 +80,7 @@ public class JMatcherEntryClient {
 		this.port = port;
 		this.retryCount = defalutRetryCount;
 		this.requestingHosts = new HashSet<>();
-		this.connectedHosts = new HashSet<>();
+		this.connectingHosts = new HashSet<>();
 		this.addresses = new HashMap<>();
 	}
 
@@ -115,17 +115,17 @@ public class JMatcherEntryClient {
 	}
 
 	/**
-	 * @return connected hosts
+	 * @return connecting hosts
 	 */
-	public Set<Host> getConnectedHost() {
-		return this.connectedHosts;
+	public Set<Host> getConnectingHosts() {
+		return this.connectingHosts;
 	}
-	
+
 	/**
 	 * @param host
 	 * @return the address of host
 	 */
-	public InetSocketAddress getAddress(Host host){
+	public InetSocketAddress getAddress(Host host) {
 		return this.addresses.get(host);
 	}
 
@@ -203,42 +203,42 @@ public class JMatcherEntryClient {
 		this.tcpSocket = null;
 		this.udpSocket = null;
 		this.requestingHosts.clear();
-		this.connectedHosts.clear();
+		this.connectingHosts.clear();
 		this.addresses.clear();
 	}
 
 	/**
-	 * @return true if updated set of connected hosts
+	 * @return true if updated set of connecting hosts
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public boolean updateConnectedHosts() throws IOException {
+	public boolean updateConnectingHosts() throws IOException {
 		if (this.isConnectingToJMatcherServer()) {
 			this.updateRequestingHosts();
-		}
-		Set<Host> notConnectedHosts = this.getNotConnectedHosts();
-		if (notConnectedHosts.isEmpty()) {
+		} else {
 			return false;
 		}
-		// udp hole punching
-		final int maxNumberOfTrying = 2;
-		for (int i = 0; i < maxNumberOfTrying; i++) {
-			for (Host notConnectedHost : notConnectedHosts) {
-				JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CONNECT, notConnectedHost);
+		Set<Host> requestingNotConnectingHosts = this.getRequestingNotConnectingHosts();
+		boolean updated = false;
+		for (int i = 0; i < this.retryCount; i++) {
+			for (Host requestingNotConnectingHost : requestingNotConnectingHosts) {
+				JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CONNECT_REQUEST, requestingNotConnectingHost);
 			}
-			this.handleResponses();
-			notConnectedHosts = this.getNotConnectedHosts();
-			if (notConnectedHosts.isEmpty()) {
-				return true;
+			updated |= this.handleResponses();
+			if (requestingNotConnectingHosts.isEmpty() == false) {
+				requestingNotConnectingHosts = this.getRequestingNotConnectingHosts();
+			}
+			if (requestingNotConnectingHosts.isEmpty()) {
+				return updated;
 			}
 		}
-		return true;
+		return updated;
 	}
 
-	private Set<Host> getNotConnectedHosts() {
-		final Set<Host> notConnectedHosts = new HashSet<>(this.requestingHosts);
-		notConnectedHosts.removeAll(this.connectedHosts);
-		return notConnectedHosts;
+	private Set<Host> getRequestingNotConnectingHosts() {
+		final Set<Host> result = new HashSet<>(this.requestingHosts);
+		result.removeAll(this.connectingHosts);
+		return result;
 	}
 
 	private void updateRequestingHosts() throws IOException {
@@ -260,33 +260,33 @@ public class JMatcherEntryClient {
 		}
 	}
 
-	private Set<Host> handleResponses() throws IOException {
-		final Set<Host> responsedHosts = new HashSet<>();
+	private boolean handleResponses() throws IOException {
+		boolean updatedConnectingHosts = false;
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
 				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, buffSize);
 				final Host from = this.specifyHost(packet);
-				final JMatcherClientMessage message = JMatcherClientUtil.getMessageFrom(packet);
+				final JMatcherClientMessage message = JMatcherClientUtil.getJMatcherMessageFrom(packet);
 				// put this case here in case previous response for cancelling
 				// didn't reach.
 				if (message == JMatcherClientMessage.CANCEL) {
 					this.requestingHosts.remove(from);
-					this.connectedHosts.remove(from);
+					updatedConnectingHosts |= this.connectingHosts.remove(from);
 					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CANCELLED, from);
 					continue;
 				}
 				if (from == null) { // from unknown host
 					continue;
 				}
-				if (message == JMatcherClientMessage.CONNECTED) {
-					this.connectedHosts.add(from);
-					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CONNECTED, from);
+				if (message == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
+					updatedConnectingHosts |= this.connectingHosts.add(from);
+					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.GOT_CONNECT_REQUEST, from);
 				}
 			}
 		} catch (SocketTimeoutException e) {
 			// one of the end conditions
 		}
-		return responsedHosts;
+		return updatedConnectingHosts;
 	}
 
 	/**

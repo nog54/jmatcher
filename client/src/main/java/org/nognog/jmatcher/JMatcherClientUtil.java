@@ -41,20 +41,27 @@ public class JMatcherClientUtil {
 		sendUDPPacket(datagramSocket, message.toString(), new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
 
-	public static void sendUDPPacket(DatagramSocket datagramSocket, String message, SocketAddress address) throws IOException {
+	public static void sendMessage(DatagramSocket datagramSocket, String message, Host host) throws IOException {
+		sendUDPPacket(datagramSocket, message, new InetSocketAddress(host.getAddress(), host.getPort()));
+	}
+
+	public static void sendMessage(DatagramSocket datagramSocket, String message, SocketAddress address) throws IOException {
+		sendUDPPacket(datagramSocket, message, address);
+	}
+
+	private static void sendUDPPacket(DatagramSocket datagramSocket, String message, SocketAddress address) throws IOException {
 		final byte[] buf = message.getBytes();
 		final DatagramPacket packet = new DatagramPacket(buf, buf.length, address);
 		datagramSocket.send(packet);
 	}
 
 	static UDPResponse receiveUDPResponse(DatagramSocket socket, int buffSize) throws IOException {
-		return UDPResponseSerializer.getInstance().deserialize(receiveUDPMessage(socket, buffSize));
+		return UDPResponseSerializer.getInstance().deserialize(receiveMessage(socket, buffSize));
 	}
 
-	public static String receiveUDPMessage(DatagramSocket socket, int buffSize) throws IOException {
+	public static String receiveMessage(DatagramSocket socket, int buffSize) throws IOException {
 		final DatagramPacket packet = receiveUDPPacket(socket, buffSize);
-		final String result = new String(packet.getData(), 0, packet.getLength());
-		return result;
+		return getMessageFrom(packet);
 	}
 
 	public static DatagramPacket receiveUDPPacket(DatagramSocket socket, int buffSize) throws IOException {
@@ -64,8 +71,12 @@ public class JMatcherClientUtil {
 		return packet;
 	}
 
-	static JMatcherClientMessage getMessageFrom(DatagramPacket packet) {
-		return JMatcherClientMessage.valueOf(new String(packet.getData(), 0, packet.getLength()));
+	static String getMessageFrom(DatagramPacket packet) {
+		return new String(packet.getData(), 0, packet.getLength());
+	}
+
+	static JMatcherClientMessage getJMatcherMessageFrom(DatagramPacket packet) {
+		return JMatcherClientMessage.valueOf(getMessageFrom(packet));
 	}
 
 	public static boolean packetCameFrom(Host host, DatagramPacket packet) {

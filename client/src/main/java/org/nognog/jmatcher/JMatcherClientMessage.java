@@ -19,5 +19,5 @@ package org.nognog.jmatcher;
  */
 @SuppressWarnings("javadoc")
 public enum JMatcherClientMessage {
-	CONNECT, CONNECTED, CANCEL, CANCELLED
+	CONNECT_REQUEST, GOT_CONNECT_REQUEST, CANCEL, CANCELLED
 }

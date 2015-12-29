@@ -63,8 +63,8 @@ public class JMatcherEntryClientTest {
 		final int wrongPort = 80;
 		final JMatcherEntryClient entryClient = new JMatcherEntryClient(wrongJmatcherHost, wrongPort);
 		assertThat(entryClient.getJmatcherHost(), is(wrongJmatcherHost));
-		assertThat(entryClient.getConnectedHost(), is(not(nullValue())));
-		assertThat(entryClient.getConnectedHost().size(), is(0));
+		assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
+		assertThat(entryClient.getConnectingHosts().size(), is(0));
 		assertThat(entryClient.getPort(), is(wrongPort));
 		assertThat(entryClient.getRetryCount(), is(JMatcherEntryClient.defalutRetryCount));
 		try {
@@ -100,7 +100,7 @@ public class JMatcherEntryClientTest {
 
 	/**
 	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#updateConnectedHosts()}.
+	 * {@link org.nognog.jmatcher.JMatcherEntryClient#updateConnectingHosts()}.
 	 * 
 	 * @throws Exception
 	 */
@@ -129,12 +129,12 @@ public class JMatcherEntryClientTest {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
 		final JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost);
 		final Integer entryKey = entryClient.makeEntry();
-		Set<Host> connectedHost = entryClient.getConnectedHost();
-		assertThat(entryClient.updateConnectedHosts(), is(false));
+		Set<Host> connectedHost = entryClient.getConnectingHosts();
+		assertThat(entryClient.updateConnectingHosts(), is(false));
 		assertThat(connectedHost.size(), is(0));
 
 		final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
-		this.craeteUpdateConnectedHostsThread(entryClient).start();
+		createUpdateConnectedHostsThread(entryClient).start();
 		connectionClient.connect(entryKey);
 		assertThat(connectedHost.size(), is(1));
 
@@ -152,7 +152,7 @@ public class JMatcherEntryClientTest {
 	}
 
 	private void testConnectWithUpdateConnectedHosts(final String jmatcherHost, final Integer entryKey, JMatcherEntryClient entryClient, final int numberOfParallelConnectionClient) {
-		this.craeteUpdateConnectedHostsThread(entryClient).start();
+		createUpdateConnectedHostsThread(entryClient).start();
 		this.startTryingToConnectThreads(jmatcherHost, entryKey, numberOfParallelConnectionClient, true);
 	}
 
@@ -182,20 +182,18 @@ public class JMatcherEntryClientTest {
 		}
 	}
 
-	private Thread craeteUpdateConnectedHostsThread(final JMatcherEntryClient entryClient) {
+	private static Thread createUpdateConnectedHostsThread(final JMatcherEntryClient entryClient) {
 		return new Thread(new Runnable() {
 			@Override
 			public void run() {
 				try {
-					Thread.sleep(2000);
+					Thread.sleep(500);
 				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 				try {
-					entryClient.updateConnectedHosts();
+					entryClient.updateConnectingHosts();
 				} catch (IOException e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
@@ -210,7 +208,6 @@ public class JMatcherEntryClientTest {
 	 */
 	@Test
 	public final void testCancelEntry() throws Exception {
-
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
@@ -235,9 +232,9 @@ public class JMatcherEntryClientTest {
 		final Integer entryKey = entryClient.makeEntry();
 
 		final int numberOfParallelConnectionClient = 10;
-		this.craeteUpdateConnectedHostsThread(entryClient).start();
+		createUpdateConnectedHostsThread(entryClient).start();
 		this.startTryingToConnectThreads(jmatcherHost, entryKey, numberOfParallelConnectionClient, true);
-		assertThat(entryClient.getConnectedHost().size(), is(numberOfParallelConnectionClient));
+		assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
 		@SuppressWarnings("resource")
 		final DatagramSocket socket = entryClient.cancelEntry();
 		assertThat(socket.isClosed(), is(false));
