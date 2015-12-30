@@ -21,8 +21,6 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 
 import org.junit.Test;
 
@@ -79,25 +77,24 @@ public class JMatcherConnectionClientTest {
 		assertThat(entryClient.getConnectingHosts().size(), is(1));
 		Thread.sleep(JMatcherEntryClient.defaultUdpSocketTimeoutMillSec);
 
-		final DatagramSocket entryClientSocket = entryClient.cancelEntry();
-		final DatagramSocket connectionClientSocket = connectionClient.getConnectingSocket();
-		assertThat(connectionClientSocket, is(not(nullValue())));
-		assertThat(connectionClientSocket.isClosed(), is(false));
+		final Peer entryClientPeer = entryClient.cancelEntry();
+		final Peer connectionClientPeer = connectionClient.getPeer();
+		assertThat(connectionClientPeer, is(not(nullValue())));
+		assertThat(connectionClientPeer.getSocket().isClosed(), is(false));
 
 		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
-		assertThat(connectionClient.sendMessageToConnectingHost(messageFromConnectionClient), is(true));
-		final DatagramPacket receivedPacket = JMatcherClientUtil.receiveUDPPacket(entryClientSocket, 1024);
-		assertThat(JMatcherClientUtil.getMessageFrom(receivedPacket), is(messageFromConnectionClient));
+		assertThat(connectionClientPeer.sendMessageToConnectingHosts(messageFromConnectionClient).size(), is(1));
+		assertThat(entryClientPeer.receiveMessage().getBody(), is(messageFromConnectionClient));
 
 		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
-		JMatcherClientUtil.sendMessage(entryClientSocket, messageFromEntryClient, receivedPacket.getSocketAddress());
-		assertThat(connectionClient.receiveMessageFromConnectingHost(), is(messageFromEntryClient));
+		entryClientPeer.sendMessageToConnectingHosts(messageFromEntryClient);
+		assertThat(connectionClientPeer.receiveMessage().getBody(), is(messageFromEntryClient));
 
 		assertThat(entryClient.getConnectingHosts().size(), is(1));
 		createUpdateConnectedHostsThread(entryClient).start();
 		connectionClient.cancelConnection();
 		assertThat(entryClient.getConnectingHosts().size(), is(1));
-		assertThat(connectionClient.sendMessageToConnectingHost(messageFromConnectionClient), is(false));
+		assertThat(connectionClientPeer.sendMessageToConnectingHosts(messageFromConnectionClient).size(), is(0));
 	}
 
 	private static Thread createUpdateConnectedHostsThread(final JMatcherEntryClient entryClient) {

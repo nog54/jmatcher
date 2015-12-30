@@ -116,6 +116,16 @@ public class JMatcherConnectionClient {
 	}
 
 	/**
+	 * @return peer
+	 */
+	public Peer getPeer() {
+		if (this.socket != null) {
+			return new Peer(this.socket, this.connectingHost);
+		}
+		return null;
+	}
+
+	/**
 	 * @return connecting host
 	 */
 	public Host getConnectingHost() {
@@ -129,75 +139,53 @@ public class JMatcherConnectionClient {
 	}
 
 	/**
-	 * @param message
-	 * @return true if succeeded in sending but it doesn't mean whether reach
-	 * @throws IOException
-	 */
-	public boolean sendMessageToConnectingHost(String message) {
-		if (this.socket == null || this.connectingHost == null) {
-			return false;
-		}
-		try {
-			JMatcherClientUtil.sendMessage(this.socket, message, this.connectingHost);
-			return true;
-		} catch (IOException e) {
-			return false;
-		}
-	}
-
-	/**
-	 * @return message from connecting host or null if failed to receive
-	 */
-	public String receiveMessageFromConnectingHost() {
-		if (this.socket == null || this.connectingHost == null) {
-			return null;
-		}
-		try {
-			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-				final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(this.connectingHost);
-				if (packet != null) {
-					return JMatcherClientUtil.getMessageFrom(packet);
-				}
-			}
-		} catch (IOException e) {
-			// socket timeout or another io error
-		}
-		return null;
-
-	}
-
-	/**
 	 * @param key
 	 * @return true if success
 	 * @throws IOException
 	 *             thrown if failed to communicate with other
 	 */
 	public boolean connect(int key) throws IOException {
-		this.socket = new DatagramSocket();
-		this.setupUDPSocket(this.socket);
-		final Host connectionTargetHost = this.getTargetHostFromServer(key);
-		if (connectionTargetHost == null) {
-			return false;
-		}
-		final InetSocketAddress connectionTargetHostAddress = new InetSocketAddress(connectionTargetHost.getAddress(), connectionTargetHost.getPort());
-
-		for (int i = 0; i < this.retryCount; i++) {
-			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.CONNECT_REQUEST, connectionTargetHost);
-			try {
-				for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-					final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(connectionTargetHostAddress);
-					if (JMatcherClientUtil.getJMatcherMessageFrom(packet) == JMatcherClientMessage.CONNECT_REQUEST) {
-						JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.GOT_CONNECT_REQUEST, connectionTargetHost);
-					} else if (JMatcherClientUtil.getJMatcherMessageFrom(packet) == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
-						this.connectingHost = connectionTargetHost;
-						return true;
-					}
-				}
-			} catch (SocketTimeoutException e) {
-				// one of the end conditions
+		try {
+			this.socket = new DatagramSocket();
+			this.setupUDPSocket(this.socket);
+			final Host connectionTargetHost = this.getTargetHostFromServer(key);
+			if (connectionTargetHost == null) {
+				return false;
 			}
+			final InetSocketAddress connectionTargetHostAddress = new InetSocketAddress(connectionTargetHost.getAddress(), connectionTargetHost.getPort());
+			for (int i = 0; i < this.retryCount; i++) {
+				final boolean success = this.tryToConnectTo(connectionTargetHost, connectionTargetHostAddress);
+				if (success) {
+					return true;
+				}
+			}
+			this.close();
+			return false;
+		} catch (IOException e) {
+			this.close();
+			throw e;
 		}
-		this.close();
+	}
+
+	private boolean tryToConnectTo(final Host connectionTargetHost, final InetSocketAddress connectionTargetHostAddress) throws IOException {
+		JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.CONNECT_REQUEST, connectionTargetHost);
+		try {
+			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
+				final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(connectionTargetHostAddress);
+				if (packet == null) {
+					continue;
+				}
+				final JMatcherClientMessage sentJMatcherMessage = JMatcherClientUtil.getJMatcherMessageFrom(packet);
+				if (sentJMatcherMessage == JMatcherClientMessage.CONNECT_REQUEST) {
+					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.GOT_CONNECT_REQUEST, connectionTargetHost);
+				} else if (sentJMatcherMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
+					this.connectingHost = connectionTargetHost;
+					return true;
+				}
+			}
+		} catch (SocketTimeoutException e) {
+			// one of the end conditions
+		}
 		return false;
 	}
 
@@ -212,10 +200,6 @@ public class JMatcherConnectionClient {
 			}
 		}
 		return null;
-	}
-
-	private DatagramPacket tryToReceiveUDPPacketFrom(Host host) throws IOException {
-		return this.tryToReceiveUDPPacketFrom(new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
 
 	private DatagramPacket tryToReceiveUDPPacketFrom(InetSocketAddress hostAddress) throws IOException {
@@ -260,10 +244,5 @@ public class JMatcherConnectionClient {
 		}
 		this.close(); // force end
 		return;
-	}
-
-	@Override
-	protected void finalize() {
-		this.close();
 	}
 }

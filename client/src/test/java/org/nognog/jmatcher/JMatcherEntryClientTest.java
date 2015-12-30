@@ -144,7 +144,6 @@ public class JMatcherEntryClientTest {
 		this.testConnectWithUpdateConnectedHosts(jmatcherHost, entryKey, entryClient, numberOfParallelConnectionClient);
 		assertThat(connectedHost.size(), is(1 + numberOfParallelConnectionClient));
 		entryClient.cancelEntry();
-		entryClient.closeAllCurrentSockets();
 	}
 
 	private void testConnectWithoutUpdateConnectedHosts(final String jmatcherHost, final Integer entryKey, final int numberOfParallelConnectionClient) {
@@ -236,9 +235,7 @@ public class JMatcherEntryClientTest {
 		this.startTryingToConnectThreads(jmatcherHost, entryKey, numberOfParallelConnectionClient, true);
 		assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
 		@SuppressWarnings("resource")
-		final DatagramSocket socket = entryClient.cancelEntry();
+		final DatagramSocket socket = entryClient.cancelEntry().getSocket();
 		assertThat(socket.isClosed(), is(false));
-		entryClient.closeAllCurrentSockets();
-		assertThat(socket.isClosed(), is(true));
 	}
 }
