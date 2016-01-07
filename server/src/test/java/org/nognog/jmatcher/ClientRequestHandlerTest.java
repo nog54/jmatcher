@@ -60,12 +60,7 @@ public class ClientRequestHandlerTest {
 			for (int i = 0; i < numberOfIterations; i++) {
 				this.doPreEntryTest(daemon);
 			}
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
-		}
-
-		finally {
+		} finally {
 			daemon.stop();
 			daemon.destroy();
 		}
@@ -126,9 +121,6 @@ public class ClientRequestHandlerTest {
 			for (int i = 0; i < numberOfIterations; i++) {
 				this.doPreEntryTestWithMultiThread(daemon);
 			}
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
 		} finally {
 			daemon.stop();
 			daemon.destroy();

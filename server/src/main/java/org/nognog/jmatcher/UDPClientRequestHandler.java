@@ -196,7 +196,7 @@ public class UDPClientRequestHandler implements Runnable {
 		final byte[] buf = serializedResponse.getBytes();
 		final DatagramPacket packet = new DatagramPacket(buf, buf.length, this.clientAddress);
 		this.socket.send(packet);
-		final String logMessage = new StringBuilder().append(this.name).append(" ").append(this.socket.getLocalAddress()).append(" -> ") //$NON-NLS-1$ //$NON-NLS-2$
+		final String logMessage = new StringBuilder().append(this.socket.getLocalAddress()).append(" -> ") //$NON-NLS-1$
 				.append(packet.getSocketAddress()).append(" : ").append(serializedResponse).toString(); //$NON-NLS-1$
 		this.log(logMessage, Level.INFO);
 	}

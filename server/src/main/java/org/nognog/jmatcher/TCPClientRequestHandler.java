@@ -172,29 +172,33 @@ public class TCPClientRequestHandler implements Runnable {
 		}
 	}
 
-	private void communicateWithRegisteredClientLoop(ObjectInputStream ois, ObjectOutputStream oos) throws ClassNotFoundException, IOException {
-		while (true) {
-			final Object readObject = ois.readObject();
-			final TCPRequest request;
-			try {
-				request = (TCPRequest) readObject;
-			} catch (ClassCastException e) {
-				this.log(readObject.toString(), Level.ERROR);
-				return;
-			}
-			if (request == PlainTCPRequest.CHECK_CONNECTION_REQUEST) {
-				final CopyOnWriteArraySet<RequestingConnectionHostHandler> waitingHandlers = this.waitingForSyncHandlersMap.get(this.entryKeyNumber);
-				if (waitingHandlers == null) {
-					oos.writeObject(new CheckConnectionResponse(null));
-				} else {
-					final Object[] waitingHandlersArray = waitingHandlers.toArray();
-					final Host[] hosts = createHostsArray(waitingHandlersArray);
-					this.releaseWaitingHandlers(waitingHandlersArray, waitingHandlers);
-					oos.writeObject(new CheckConnectionResponse(hosts));
+	private void communicateWithRegisteredClientLoop(ObjectInputStream ois, ObjectOutputStream oos) throws ClassNotFoundException {
+		try {
+			while (true) {
+				final Object readObject = ois.readObject();
+				final TCPRequest request;
+				try {
+					request = (TCPRequest) readObject;
+				} catch (ClassCastException e) {
+					this.log(readObject.toString(), Level.ERROR);
+					return;
 				}
-			} else { // catch invalid request
-				break;
+				if (request == PlainTCPRequest.CHECK_CONNECTION_REQUEST) {
+					final CopyOnWriteArraySet<RequestingConnectionHostHandler> waitingHandlers = this.waitingForSyncHandlersMap.get(this.entryKeyNumber);
+					if (waitingHandlers == null) {
+						oos.writeObject(new CheckConnectionResponse(null));
+					} else {
+						final Object[] waitingHandlersArray = waitingHandlers.toArray();
+						final Host[] hosts = createHostsArray(waitingHandlersArray);
+						this.releaseWaitingHandlers(waitingHandlersArray, waitingHandlers);
+						oos.writeObject(new CheckConnectionResponse(hosts));
+					}
+				} else { // catch invalid request
+					break;
+				}
 			}
+		} catch (IOException e) {
+			// mainly, The IOException is caused by closing socket
 		}
 	}
 

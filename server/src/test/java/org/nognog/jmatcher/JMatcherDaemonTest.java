@@ -55,18 +55,15 @@ public class JMatcherDaemonTest {
 		assertThat(daemon.getBoundOfKeyNumber(), is(0));
 		try {
 			daemon.init(null);
-		} catch (Exception e) {
-			e.printStackTrace();
+			assertThat(daemon.getMatchingMap(), is(not(nullValue())));
+			assertThat(daemon.getWaitingHandlersMap(), is(not(nullValue())));
+			assertThat(daemon.getExecutorService(), is(not(nullValue())));
+			assertThat(daemon.getMatchingMapCapacity(), is(not(0)));
+			assertThat(daemon.getBoundOfKeyNumber(), is(not(0)));
+		} finally {
 			daemon.stop();
-			fail();
+			daemon.destroy();
 		}
-		assertThat(daemon.getMatchingMap(), is(not(nullValue())));
-		assertThat(daemon.getWaitingHandlersMap(), is(not(nullValue())));
-		assertThat(daemon.getExecutorService(), is(not(nullValue())));
-		assertThat(daemon.getMatchingMapCapacity(), is(not(0)));
-		assertThat(daemon.getBoundOfKeyNumber(), is(not(0)));
-		daemon.stop();
-		daemon.destroy();
 	}
 
 	/**

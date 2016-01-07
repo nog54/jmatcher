@@ -68,9 +68,6 @@ public class MakeConnectionTest {
 		daemon.start();
 		try {
 			this.doConnectTest(daemon);
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
 		} finally {
 			daemon.stop();
 			daemon.destroy();
