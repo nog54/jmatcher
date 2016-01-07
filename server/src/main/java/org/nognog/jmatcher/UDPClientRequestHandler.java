@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.nognog.jmatcher.udp.request.ConnectionRequest;
@@ -52,7 +53,7 @@ public class UDPClientRequestHandler implements Runnable {
 	/**
 	 * 
 	 */
-	public static final int WAIT_TIME_FOR_MATCHING_TIMING = 5000; // 
+	public static final int WAIT_TIME_FOR_MATCHING_TIMING = 5000; //
 
 	/**
 	 * @param jmatcherDaemon
@@ -73,6 +74,24 @@ public class UDPClientRequestHandler implements Runnable {
 		this.name = new StringBuilder().append("UDP(").append(this.number).append(")").toString(); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
+	private void log(String message, Level level) {
+		logger.log(level, createLappedMessage(message));
+	}
+
+	private void log(Throwable t, Level level) {
+		this.log("", t, level); //$NON-NLS-1$
+	}
+
+	private void log(String message, Throwable t, Level level) {
+		logger.log(level, createLappedMessage(message), t);
+	}
+
+	private String createLappedMessage(String message) {
+		final StringBuilder sb = new StringBuilder();
+		sb.append(this.name).append(" ").append(message); //$NON-NLS-1$
+		return sb.toString();
+	}
+
 	/**
 	 * @return the clientAddress
 	 */
@@ -89,9 +108,9 @@ public class UDPClientRequestHandler implements Runnable {
 		try {
 			this.handleRequest(request);
 		} catch (IOException e) {
-			logger.error(this.name, e);
+			this.log(e, Level.ERROR);
 		} catch (Throwable e) {
-			logger.fatal(this.name, e);
+			this.log(e, Level.FATAL);
 		}
 	}
 
@@ -179,7 +198,7 @@ public class UDPClientRequestHandler implements Runnable {
 		this.socket.send(packet);
 		final String logMessage = new StringBuilder().append(this.name).append(" ").append(this.socket.getLocalAddress()).append(" -> ") //$NON-NLS-1$ //$NON-NLS-2$
 				.append(packet.getSocketAddress()).append(" : ").append(serializedResponse).toString(); //$NON-NLS-1$
-		logger.info(logMessage);
+		this.log(logMessage, Level.INFO);
 	}
 
 	/**

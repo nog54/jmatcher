@@ -19,5 +19,5 @@ package org.nognog.jmatcher.tcp.request;
  */
 @SuppressWarnings("javadoc")
 public enum PlainTCPRequest implements TCPRequest {
-	ENTRY, CANCEL_ENTRY, CHECK_CONNECTION_REQUEST,;
+	ENTRY, CHECK_CONNECTION_REQUEST,;
 }

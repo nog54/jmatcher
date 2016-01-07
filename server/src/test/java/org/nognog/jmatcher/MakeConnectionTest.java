@@ -149,7 +149,7 @@ public class MakeConnectionTest {
 						String receivedMessage = receiveUDPMessage(entryHostUDPSocket);
 						assertThat(receivedMessage, is(stringToEntryHost));
 					}
-					oos.writeObject(PlainTCPRequest.CANCEL_ENTRY);
+					oos.writeObject("invalid request");
 					try {
 						sendTCPRequestAndGetResponse(oos, ois, PlainTCPRequest.CHECK_CONNECTION_REQUEST);
 						fail();

@@ -38,7 +38,7 @@ public class JMatcherDaemon implements Daemon {
 	/**
 	 * The default of the capacity of matching map.
 	 */
-	public static final int DEFAULT_MATCHING_MAP_CAPACITY = 512;
+	public static final int DEFAULT_MATCHING_MAP_CAPACITY = 256;
 	
 	/**
 	 * UDP buffer size

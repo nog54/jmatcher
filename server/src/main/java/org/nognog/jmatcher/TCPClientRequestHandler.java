@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.nognog.jmatcher.tcp.request.PlainTCPRequest;
@@ -70,15 +71,33 @@ public class TCPClientRequestHandler implements Runnable {
 		this.name = new StringBuilder().append("TCP(").append(this.number).append(")").toString(); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
+	private void log(String message, Level level) {
+		logger.log(level, createLappedMessage(message));
+	}
+
+	private void log(Throwable t, Level level) {
+		this.log("", t, level); //$NON-NLS-1$
+	}
+
+	private void log(String message, Throwable t, Level level) {
+		logger.log(level, createLappedMessage(message), t);
+	}
+
+	private String createLappedMessage(String message) {
+		final StringBuilder sb = new StringBuilder();
+		sb.append(this.name).append(" ").append(message); //$NON-NLS-1$
+		return sb.toString();
+	}
+
 	@Override
 	public void run() {
 		try (final ObjectInputStream ois = new ObjectInputStream(this.socket.getInputStream()); final ObjectOutputStream oos = new ObjectOutputStream(this.socket.getOutputStream())) {
 			final TCPRequest request = (TCPRequest) ois.readObject();
 			this.handleRequest(request, ois, oos);
 		} catch (IOException | ClassNotFoundException e) {
-			logger.error(this.name, e);
+			this.log(e, Level.ERROR);
 		} catch (Throwable t) {
-			logger.fatal("unexpected error occured", t); //$NON-NLS-1$
+			this.log("unexpected error occured", t, Level.FATAL); //$NON-NLS-1$
 		} finally {
 			this.close();
 		}
@@ -120,14 +139,14 @@ public class TCPClientRequestHandler implements Runnable {
 		}
 		final StringBuilder sb = new StringBuilder();
 		sb.append("PreEntry : ").append(this.entryKeyNumber).append(" = ").append(this.matchingMap.get(this.entryKeyNumber)); //$NON-NLS-1$ //$NON-NLS-2$
-		logger.info(sb.toString());
+		this.log(sb.toString(), Level.INFO);
 		final PreEntryResponse entryResponse = new PreEntryResponse(this.entryKeyNumber);
 		oos.writeObject(entryResponse);
 		try {
 			this.waitForUDPEntry();
 		} catch (TimeoutException e) {
-			String timeoutMessage = new StringBuilder().append(this.name).append(" : ").append(this.entryKeyNumber).append(" timeout").toString(); //$NON-NLS-1$ //$NON-NLS-2$
-			logger.info(timeoutMessage);
+			String timeoutMessage = new StringBuilder().append(": ").append(this.entryKeyNumber).append(" timeout").toString(); //$NON-NLS-1$ //$NON-NLS-2$
+			this.log(timeoutMessage, Level.INFO);
 			return;
 		}
 		this.jmatcherDaemon.logMatchingMap();
@@ -155,7 +174,14 @@ public class TCPClientRequestHandler implements Runnable {
 
 	private void communicateWithRegisteredClientLoop(ObjectInputStream ois, ObjectOutputStream oos) throws ClassNotFoundException, IOException {
 		while (true) {
-			final TCPRequest request = (TCPRequest) ois.readObject();
+			final Object readObject = ois.readObject();
+			final TCPRequest request;
+			try {
+				request = (TCPRequest) readObject;
+			} catch (ClassCastException e) {
+				this.log(readObject.toString(), Level.ERROR);
+				return;
+			}
 			if (request == PlainTCPRequest.CHECK_CONNECTION_REQUEST) {
 				final CopyOnWriteArraySet<RequestingConnectionHostHandler> waitingHandlers = this.waitingForSyncHandlersMap.get(this.entryKeyNumber);
 				if (waitingHandlers == null) {
@@ -166,7 +192,7 @@ public class TCPClientRequestHandler implements Runnable {
 					this.releaseWaitingHandlers(waitingHandlersArray, waitingHandlers);
 					oos.writeObject(new CheckConnectionResponse(hosts));
 				}
-			} else {
+			} else { // catch invalid request
 				break;
 			}
 		}
@@ -219,7 +245,7 @@ public class TCPClientRequestHandler implements Runnable {
 		try {
 			this.socket.close();
 		} catch (IOException e) {
-			logger.error("Failed to close socket", e); //$NON-NLS-1$
+			this.log("Failed to close socket", e, Level.ERROR); //$NON-NLS-1$
 		}
 	}
 }
