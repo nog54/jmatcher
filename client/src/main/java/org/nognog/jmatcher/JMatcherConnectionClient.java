@@ -31,14 +31,15 @@ public class JMatcherConnectionClient {
 
 	private String jmatcherHost;
 	private int port;
-	private int retryCount;
+	private int retryCount = defaultRetryCount;
+	private int receiveBuffSize = defaultBuffSize;
 
 	private DatagramSocket socket;
 	private Host connectingHost;
 
-	private static final int defalutRetryCount = 2;
-	private static final int buffSize = 128;
-	private static final int defaultUdpSocketTimeoutMillSec = 1000;
+	private static final int defaultRetryCount = 2;
+	private static final int defaultBuffSize = 128;
+	private static final int defaultUdpSocketTimeoutMillSec = 4000;
 	private static final int maxCountOfReceivePacketsAtOneTime = 20;
 
 	/**
@@ -59,7 +60,6 @@ public class JMatcherConnectionClient {
 	public JMatcherConnectionClient(String host, int port) {
 		this.jmatcherHost = host;
 		this.port = port;
-		this.retryCount = defalutRetryCount;
 	}
 
 	/**
@@ -116,20 +116,25 @@ public class JMatcherConnectionClient {
 	}
 
 	/**
-	 * @return peer
-	 */
-	public Peer getPeer() {
-		if (this.socket != null) {
-			return new Peer(this.socket, this.connectingHost);
-		}
-		return null;
-	}
-
-	/**
 	 * @return connecting host
 	 */
 	public Host getConnectingHost() {
 		return this.connectingHost;
+	}
+
+	/**
+	 * @return the receiveBuffSize
+	 */
+	public int getReceiveBuffSize() {
+		return this.receiveBuffSize;
+	}
+
+	/**
+	 * @param receiveBuffSize
+	 *            the receiveBuffSize to set
+	 */
+	public void setReceiveBuffSize(int receiveBuffSize) {
+		this.receiveBuffSize = receiveBuffSize;
 	}
 
 	@SuppressWarnings("static-method")
@@ -193,7 +198,7 @@ public class JMatcherConnectionClient {
 		for (int i = 0; i < this.retryCount; i++) {
 			try {
 				JMatcherClientUtil.sendUDPRequest(this.socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherHost, this.port));
-				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, buffSize);
+				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, defaultBuffSize);
 				return response.getHost();
 			} catch (IOException | NullPointerException | ClassCastException e) {
 				// failed
@@ -203,7 +208,7 @@ public class JMatcherConnectionClient {
 	}
 
 	private DatagramPacket tryToReceiveUDPPacketFrom(InetSocketAddress hostAddress) throws IOException {
-		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, buffSize);
+		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, defaultBuffSize);
 		if (JMatcherClientUtil.packetCameFrom(hostAddress, packet) == false) {
 			return null;
 		}
@@ -244,5 +249,36 @@ public class JMatcherConnectionClient {
 		}
 		this.close(); // force end
 		return;
+	}
+
+	/**
+	 * @param message
+	 * @return true if succeed in sending
+	 * @throws IOException
+	 */
+	public boolean sendMessage(String message) {
+		if (this.socket == null || this.connectingHost == null || message == null || this.socket.isClosed()) {
+			return false;
+		}
+		try {
+			JMatcherClientUtil.sendMessage(this.socket, message, this.connectingHost);
+		} catch (IOException e) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * @return message from connectingHost
+	 */
+	public String receiveMessage() {
+		if (this.socket == null || this.connectingHost == null || this.socket.isClosed()) {
+			return null;
+		}
+		try {
+			return JMatcherClientUtil.receiveMessage(this.socket, this.receiveBuffSize);
+		} catch (IOException e) {
+			return null;
+		}
 	}
 }

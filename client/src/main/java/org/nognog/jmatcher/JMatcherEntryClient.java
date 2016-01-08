@@ -14,6 +14,7 @@
 
 package org.nognog.jmatcher;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -23,10 +24,13 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import org.nognog.jmatcher.tcp.request.PlainTCPRequest;
 import org.nognog.jmatcher.tcp.response.CheckConnectionResponse;
@@ -36,29 +40,36 @@ import org.nognog.jmatcher.tcp.response.TCPResponse;
 import org.nognog.jmatcher.udp.request.EnableEntryRequest;
 
 /**
- * Entry Client class. This class isn't thread-safe
+ * Entry Client of JMatcher class.
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherEntryClient {
+public class JMatcherEntryClient implements Closeable {
 
 	private String jmatcherHost;
 	private int port;
-	private int retryCount;
+	private int retryCount = defalutRetryCount;
+	protected Thread communicationThread;
+	protected boolean isStoppingCommunication;
 
 	private Socket tcpSocket;
 	private ObjectInputStream ois;
 	private ObjectOutputStream oos;
 	private DatagramSocket udpSocket;
+	private int udpReceiveBuffSize = defaultBuffSize;
 
+	// knownHosts ⊇ requestingHosts ⊇ connectingHosts
+	private Set<Host> knownHosts;
 	private Set<Host> requestingHosts;
-	private Map<Host, InetSocketAddress> socketAddressCache;
 	private Set<Host> connectingHosts;
+	private Map<Host, InetSocketAddress> socketAddressCache;
+
+	private Map<Host, BlockingQueue<String>> receivedMessages;
 
 	static final int defalutRetryCount = 2;
-	static final int buffSize = 128;
-	static final int defaultUdpSocketTimeoutMillSec = 1000;
-	static final int maxCountOfReceivePacketsAtOneTime = 20;
+	static final int defaultBuffSize = 128;
+	static final int defaultUdpSocketTimeoutMillSec = 1000; // [msec]
+	static final long intervalToUpdateRequestingHosts = 2000; // [msec]
 
 	/**
 	 * @param jmatcherHost
@@ -78,10 +89,11 @@ public class JMatcherEntryClient {
 	public JMatcherEntryClient(String jmatcherHost, int port) {
 		this.jmatcherHost = jmatcherHost;
 		this.port = port;
-		this.retryCount = defalutRetryCount;
+		this.knownHosts = new HashSet<>();
 		this.requestingHosts = new HashSet<>();
 		this.connectingHosts = new HashSet<>();
 		this.socketAddressCache = new HashMap<>();
+		this.receivedMessages = new HashMap<>();
 	}
 
 	/**
@@ -95,7 +107,7 @@ public class JMatcherEntryClient {
 	 * @param jmatcherHost
 	 *            the jmatcherHost to set
 	 */
-	public void setHost(String jmatcherHost) {
+	public void setJMatcherHost(String jmatcherHost) {
 		this.jmatcherHost = jmatcherHost;
 	}
 
@@ -118,7 +130,7 @@ public class JMatcherEntryClient {
 	 * @return connecting hosts
 	 */
 	public Set<Host> getConnectingHosts() {
-		return this.connectingHosts;
+		return new HashSet<>(this.connectingHosts);
 	}
 
 	/**
@@ -136,98 +148,205 @@ public class JMatcherEntryClient {
 		this.retryCount = retryCount;
 	}
 
-	protected void setupTCPSocket(final Socket tcpSocket) {
+	@SuppressWarnings("unused")
+	protected void setupTCPSocket(final Socket tcpSocket) throws SocketException {
 		// overridden when configure the option of tcp-socket
 	}
 
-	@SuppressWarnings("static-method")
+	@SuppressWarnings("unused")
 	protected void setupUDPSocket(final DatagramSocket udpSocket) throws SocketException {
 		// overridden when configure the option of udp-socket
-		udpSocket.setSoTimeout(defaultUdpSocketTimeoutMillSec);
 	}
 
 	/**
-	 * @return entry key number, or null is returned if failed to get entry key
+	 * @return the udpReceiveBuffSize
+	 */
+	public int getUDPReceiveBuffSize() {
+		return this.udpReceiveBuffSize;
+	}
+
+	/**
+	 * @param udpReceiveBuffSize
+	 *            the udpReceiveBuffSize to set
+	 */
+	public void setUDPReceiveBuffSize(int udpReceiveBuffSize) {
+		this.udpReceiveBuffSize = udpReceiveBuffSize;
+	}
+
+	/**
+	 * @return entry key number, or null is returned if it has been started or
+	 *         failed to get entry key from the server
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public Integer makeEntry() throws IOException {
-		this.cancelEntry();
-		this.closeAllCurrentSockets();
+	public synchronized Integer startInvitation() throws IOException {
+		if (this.isStoppingCommunication) {
+			this.waitForCommunicationThread();
+		}
+		if (this.isCommunicating()) {
+			return null;
+		}
 		for (int i = 0; i < this.retryCount; i++) {
+			this.closeAllConnections();
 			try {
-				this.tcpSocket = new Socket(this.jmatcherHost, this.port);
-				this.setupTCPSocket(this.tcpSocket);
-				this.oos = new ObjectOutputStream(this.tcpSocket.getOutputStream());
-				this.ois = new ObjectInputStream(this.tcpSocket.getInputStream());
-				this.oos.writeObject(PlainTCPRequest.ENTRY);
-				this.oos.flush();
-				final TCPResponse entryResponse = (TCPResponse) this.ois.readObject();
-				if (entryResponse == PlainTCPResponse.FAILURE) {
+				this.createTCPConnection();
+				final Integer keyNumber = this.makePreEntry();
+				if (keyNumber == null) {
 					return null;
 				}
-				final Integer keyNumber = ((PreEntryResponse) entryResponse).getKeyNumber();
-				this.udpSocket = new DatagramSocket();
-				this.setupUDPSocket(this.udpSocket);
-				JMatcherClientUtil.sendUDPRequest(this.udpSocket, new EnableEntryRequest(keyNumber), new InetSocketAddress(this.jmatcherHost, this.port));
-				final TCPResponse response = (TCPResponse) this.ois.readObject();
-				if (response == PlainTCPResponse.COMPLETE_ENTRY) {
+				this.createUDPConnection();
+				final boolean enabledEntry = this.enableEntry(keyNumber);
+				if (enabledEntry) {
+					this.startCommunicationThread();
 					return keyNumber;
 				}
 			} catch (IOException | ClassNotFoundException | ClassCastException e) {
 				// failed
+			} catch (Exception e) {
+				System.err.println("unexpected expection occured"); //$NON-NLS-1$
+				e.printStackTrace();
 			}
-			this.closeAllCurrentSockets();
 		}
+		this.closeAllConnections();
 		throw new IOException("failed to connect to the server"); //$NON-NLS-1$
 	}
 
-	private void closeAllCurrentSockets() {
-		JMatcherClientUtil.close(this.ois);
-		JMatcherClientUtil.close(this.oos);
-		JMatcherClientUtil.close(this.tcpSocket);
-		JMatcherClientUtil.close(this.udpSocket);
-		this.ois = null;
-		this.oos = null;
-		this.tcpSocket = null;
-		this.udpSocket = null;
-		this.requestingHosts.clear();
-		this.connectingHosts.clear();
-		this.socketAddressCache.clear();
+	private void waitForCommunicationThread() {
+		try {
+			this.communicationThread.join(defaultUdpSocketTimeoutMillSec * 2);
+		} catch (InterruptedException | NullPointerException e) {
+			// end
+		}
+	}
+
+	private void createTCPConnection() throws UnknownHostException, IOException, SocketException {
+		this.tcpSocket = new Socket(this.jmatcherHost, this.port);
+		this.setupTCPSocket(this.tcpSocket);
+		this.oos = new ObjectOutputStream(this.tcpSocket.getOutputStream());
+		this.ois = new ObjectInputStream(this.tcpSocket.getInputStream());
+	}
+
+	private Integer makePreEntry() throws IOException, ClassNotFoundException {
+		this.oos.writeObject(PlainTCPRequest.ENTRY);
+		this.oos.flush();
+		final TCPResponse entryResponse = (TCPResponse) this.ois.readObject();
+		if (entryResponse == PlainTCPResponse.FAILURE) {
+			return null;
+		}
+		final Integer keyNumber = ((PreEntryResponse) entryResponse).getKeyNumber();
+		return keyNumber;
+	}
+
+	private void createUDPConnection() throws SocketException {
+		this.udpSocket = new DatagramSocket();
+		this.udpSocket.setSoTimeout(defaultUdpSocketTimeoutMillSec);
+		this.setupUDPSocket(this.udpSocket);
+	}
+
+	private boolean enableEntry(final Integer keyNumber) throws IOException, ClassNotFoundException {
+		JMatcherClientUtil.sendUDPRequest(this.udpSocket, new EnableEntryRequest(keyNumber), new InetSocketAddress(this.jmatcherHost, this.port));
+		final TCPResponse response = (TCPResponse) this.ois.readObject();
+		if (response == PlainTCPResponse.COMPLETE_ENTRY) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
-	 * @return true if updated set of connecting hosts
-	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
+	 * close all connections
 	 */
-	public boolean updateConnectingHosts() throws IOException {
-		if (this.isConnectingToJMatcherServer()) {
-			this.updateRequestingHosts();
-		} else {
-			return false;
+	public void closeAllConnections() {
+		this.closeTCPConnection();
+		if (this.communicationThread != null) {
+			this.isStoppingCommunication = true;
 		}
-		Set<Host> requestingNotConnectingHosts = this.getRequestingNotConnectingHosts();
-		boolean updated = false;
-		for (int i = 0; i < this.retryCount; i++) {
-			for (Host requestingNotConnectingHost : requestingNotConnectingHosts) {
-				JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CONNECT_REQUEST, requestingNotConnectingHost);
-			}
-			updated |= this.handleResponses();
-			if (requestingNotConnectingHosts.isEmpty() == false) {
-				requestingNotConnectingHosts = this.getRequestingNotConnectingHosts();
-			}
-			if (requestingNotConnectingHosts.isEmpty()) {
-				return updated;
-			}
-		}
-		return updated;
+		this.closeUDPConnection();
+		this.requestingHosts.clear();
+		this.connectingHosts.clear();
+		this.socketAddressCache.clear();
+		this.receivedMessages.clear();
 	}
 
-	private Set<Host> getRequestingNotConnectingHosts() {
-		final Set<Host> result = new HashSet<>(this.requestingHosts);
-		result.removeAll(this.connectingHosts);
-		return result;
+	private void closeTCPConnection() {
+		JMatcherClientUtil.close(this.ois);
+		JMatcherClientUtil.close(this.oos);
+		JMatcherClientUtil.close(this.tcpSocket);
+		this.ois = null;
+		this.oos = null;
+		this.tcpSocket = null;
+	}
+
+	private void closeUDPConnection() {
+		JMatcherClientUtil.close(this.udpSocket);
+		this.udpSocket = null;
+	}
+
+	/**
+	 * @return true if this is inviting other peers
+	 */
+	public boolean isInviting() {
+		return this.tcpSocket != null && !this.tcpSocket.isClosed();
+	}
+
+	/**
+	 * @return true if this is communicating
+	 */
+	public boolean isCommunicating() {
+		return this.communicationThread != null;
+	}
+
+	/**
+	 * request to stop invi
+	 */
+	public void stopInvitation() {
+		if (!this.isInviting()) {
+			return;
+		}
+		this.closeTCPConnection();
+	}
+
+	private void startCommunicationThread() {
+		this.communicationThread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					JMatcherEntryClient.this.doCommunicationLoop();
+				} finally {
+					JMatcherEntryClient.this.communicationThread = null;
+					JMatcherEntryClient.this.isStoppingCommunication = false;
+				}
+			}
+		});
+		this.communicationThread.start();
+	}
+
+	protected void doCommunicationLoop() {
+		try {
+			long lastUpdatedTime = 0;
+			while (!this.isStoppingCommunication) {
+				if (this.isInviting() && this.isTheTimeToUpdateRuestingHosts(lastUpdatedTime)) {
+					try {
+						this.updateRequestingHosts();
+					} catch (IOException e) {
+						// closed tcp socket while updating
+						// (stopped inviting while updating)
+						continue;
+					}
+					lastUpdatedTime = System.currentTimeMillis();
+					this.sendHolePunchingMessage();
+				}
+				try {
+					this.receivePacketAndHandle();
+				} catch (IOException e) {
+					throw e;
+				} catch (Exception e) {
+					// unexpected exception occured
+					e.printStackTrace();
+				}
+			}
+		} catch (IOException e) {
+			// IOException is mainly caused by closing socket
+		}
 	}
 
 	private void updateRequestingHosts() throws IOException {
@@ -239,6 +358,7 @@ public class JMatcherEntryClient {
 			if (newRequestingHosts != null) {
 				for (Host newRequestingHost : newRequestingHosts) {
 					this.requestingHosts.add(newRequestingHost);
+					this.knownHosts.add(newRequestingHost);
 					this.socketAddressCache.put(newRequestingHost, new InetSocketAddress(newRequestingHost.getAddress(), newRequestingHost.getPort()));
 				}
 			}
@@ -249,33 +369,71 @@ public class JMatcherEntryClient {
 		}
 	}
 
-	private boolean handleResponses() throws IOException {
-		boolean updatedConnectingHosts = false;
+	@SuppressWarnings("static-method")
+	private boolean isTheTimeToUpdateRuestingHosts(long lastUpdatedTime) {
+		return System.currentTimeMillis() - lastUpdatedTime > intervalToUpdateRequestingHosts;
+	}
+
+	private void sendHolePunchingMessage() throws IOException {
+		final Set<Host> requestingNotConnectingHosts = this.getRequestingNotConnectingHosts();
+		for (Host requestingNotConnectingHost : requestingNotConnectingHosts) {
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CONNECT_REQUEST, requestingNotConnectingHost);
+		}
+	}
+
+	private Set<Host> getRequestingNotConnectingHosts() {
+		final Set<Host> result = new HashSet<>(this.requestingHosts);
+		result.removeAll(this.connectingHosts);
+		return result;
+	}
+
+	/**
+	 * @throws IOException
+	 *             It's thrown if failed to connect to the server
+	 */
+	private void receivePacketAndHandle() throws IOException {
+		final DatagramPacket packet;
 		try {
-			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, buffSize);
-				final Host from = this.specifyHost(packet);
-				final JMatcherClientMessage message = JMatcherClientUtil.getJMatcherMessageFrom(packet);
-				// put this case here in case previous response for cancelling
-				// didn't reach.
-				if (message == JMatcherClientMessage.CANCEL) {
-					this.requestingHosts.remove(from);
-					updatedConnectingHosts |= this.connectingHosts.remove(from);
-					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CANCELLED, from);
-					continue;
-				}
-				if (from == null) { // from unknown host
-					continue;
-				}
-				if (message == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
-					updatedConnectingHosts |= this.connectingHosts.add(from);
-					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.GOT_CONNECT_REQUEST, from);
+			packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, this.udpReceiveBuffSize);
+		} catch (SocketTimeoutException e) {
+			return;
+		}
+		final Host from = this.specifyHost(packet);
+		if (from == null) {
+			return;
+		}
+		final JMatcherClientMessage jmatcherClientMessage = JMatcherClientUtil.getJMatcherMessageFrom(packet);
+		// in case JmatcherClientMessage isn't sent
+		if (jmatcherClientMessage == null) {
+			this.storeMessageIfFromConnectingHost(packet, from);
+			return;
+		}
+		if (jmatcherClientMessage == JMatcherClientMessage.CANCEL) {
+			this.requestingHosts.remove(from);
+			this.connectingHosts.remove(from);
+			this.receivedMessages.remove(from);
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CANCELLED, from);
+		} else if (jmatcherClientMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST && this.requestingHosts.contains(from)) {
+			this.connectingHosts.add(from);
+			if (this.receivedMessages.get(from) == null) {
+				this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
+			}
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.GOT_CONNECT_REQUEST, from);
+		}
+	}
+
+	private void storeMessageIfFromConnectingHost(final DatagramPacket packet, final Host from) {
+		if (this.connectingHosts.contains(from)) {
+			final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
+			if (receivedMessage != null) {
+				final boolean added = this.receivedMessages.get(from).offer(receivedMessage);
+				if (added) {
+					synchronized (from) {
+						from.notifyAll();
+					}
 				}
 			}
-		} catch (SocketTimeoutException e) {
-			// one of the end conditions
 		}
-		return updatedConnectingHosts;
 	}
 
 	/**
@@ -284,41 +442,61 @@ public class JMatcherEntryClient {
 	 *         host
 	 */
 	private Host specifyHost(DatagramPacket packet) {
-		for (Host requestingHost : this.requestingHosts) {
-			final InetSocketAddress hostAddress = this.socketAddressCache.get(requestingHost);
+		for (Host knownHost : this.knownHosts) {
+			final InetSocketAddress hostAddress = this.socketAddressCache.get(knownHost);
 			if (JMatcherClientUtil.packetCameFrom(hostAddress, packet)) {
-				return requestingHost;
+				return knownHost;
 			}
 		}
 		return null;
 	}
 
-	private boolean isConnectingToJMatcherServer() {
-		return this.tcpSocket != null && this.oos != null && this.ois != null;
+	/**
+	 * Receive message from argument host. The argument host have to be
+	 * contained in a set which is obtained by {@link #getConnectingHosts()}
+	 * 
+	 * @param host
+	 * @return message from host
+	 */
+	public String receiveMessageFrom(Host host) {
+		final String alreadyReceivedMessage = this.receivedMessages.get(host).poll();
+		if (alreadyReceivedMessage != null || this.udpSocket == null) {
+			return alreadyReceivedMessage;
+		}
+
+		synchronized (host) {
+			try {
+				host.wait(this.udpSocket.getSoTimeout());
+			} catch (SocketException | InterruptedException e) {
+				return null;
+			}
+		}
+		return this.receivedMessages.get(host).poll();
 	}
 
 	/**
-	 * @return peer class to communicate with requesting hosts, or null if there
-	 *         aren't requesting hosts
-	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
+	 * @param host
+	 * @param message
+	 * @return true if succeed in sending
 	 */
-	public Peer cancelEntry() throws IOException {
-		if (this.isConnectingToJMatcherServer() == false) {
-			return null;
+	public boolean sendMessageTo(Host host, String message) {
+		if (!this.connectingHosts.contains(host)) {
+			return false;
 		}
-		this.oos.writeObject(PlainTCPRequest.CANCEL_ENTRY);
-		this.closeTCPSocket();
-		return new Peer(this.udpSocket, this.connectingHosts);
+		final InetSocketAddress address = this.socketAddressCache.get(host);
+		if (address == null) {
+			return false;
+		}
+		try {
+			JMatcherClientUtil.sendMessage(this.udpSocket, message, address);
+		} catch (IOException e) {
+			return false;
+		}
+		return true;
 	}
 
-	private void closeTCPSocket() {
-		JMatcherClientUtil.close(this.ois);
-		JMatcherClientUtil.close(this.oos);
-		JMatcherClientUtil.close(this.tcpSocket);
-		this.ois = null;
-		this.oos = null;
-		this.tcpSocket = null;
+	@Override
+	public void close() {
+		this.closeAllConnections();
 	}
-
 }

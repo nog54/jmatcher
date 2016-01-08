@@ -15,10 +15,7 @@
 package org.nognog.jmatcher;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
@@ -36,15 +33,12 @@ public class JMatcherConnectionClientTest {
 	 * @throws Exception
 	 */
 	@Test
-	public final void testConnectAndCancelConnection() throws Exception {
+	public final void testSendAndReceiveMessage() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doTestConnectAndCancelConnection(daemon);
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
+			this.doTestSendAndReceiveMessage(daemon);
 		} finally {
 			daemon.stop();
 			daemon.destroy();
@@ -55,63 +49,56 @@ public class JMatcherConnectionClientTest {
 	 * @param daemon
 	 * @throws IOException
 	 */
-	@SuppressWarnings({ "boxing", "resource", "static-method" })
-	private void doTestConnectAndCancelConnection(JMatcherDaemon daemon) throws Exception {
+	@SuppressWarnings({ "boxing" })
+	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		final JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost);
-		final Integer entryKey = entryClient.makeEntry();
-		final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost)) {
+			final Integer entryKey = entryClient.startInvitation();
+			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
+			assertThat(connectionClient.connect(entryKey), is(true));
+			assertThat(entryClient.getConnectingHosts().size(), is(1));
 
-		createUpdateConnectedHostsThread(entryClient).start();
-		assertThat(connectionClient.connect(entryKey), is(true));
-		Thread.sleep(JMatcherEntryClient.defaultUdpSocketTimeoutMillSec);
+			connectionClient.cancelConnection();
+			Thread.sleep(250); // wait for entryClient to handle cancel-request
+			assertThat(entryClient.getConnectingHosts().size(), is(0));
 
-		assertThat(entryClient.getConnectingHosts().size(), is(1));
-		createUpdateConnectedHostsThread(entryClient).start();
-		connectionClient.cancelConnection();
-		Thread.sleep(1000);
-		assertThat(entryClient.getConnectingHosts().size(), is(0));
-
-		createUpdateConnectedHostsThread(entryClient).start();
-		assertThat(connectionClient.connect(entryKey), is(true));
-		assertThat(entryClient.getConnectingHosts().size(), is(1));
-		Thread.sleep(JMatcherEntryClient.defaultUdpSocketTimeoutMillSec);
-
-		final Peer entryClientPeer = entryClient.cancelEntry();
-		final Peer connectionClientPeer = connectionClient.getPeer();
-		assertThat(connectionClientPeer, is(not(nullValue())));
-		assertThat(connectionClientPeer.getSocket().isClosed(), is(false));
-
-		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
-		assertThat(connectionClientPeer.sendMessageToConnectingHosts(messageFromConnectionClient).size(), is(1));
-		assertThat(entryClientPeer.receiveMessage().getBody(), is(messageFromConnectionClient));
-
-		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
-		entryClientPeer.sendMessageToConnectingHosts(messageFromEntryClient);
-		assertThat(connectionClientPeer.receiveMessage().getBody(), is(messageFromEntryClient));
-
-		assertThat(entryClient.getConnectingHosts().size(), is(1));
-		createUpdateConnectedHostsThread(entryClient).start();
-		connectionClient.cancelConnection();
-		assertThat(entryClient.getConnectingHosts().size(), is(1));
-		assertThat(connectionClientPeer.sendMessageToConnectingHosts(messageFromConnectionClient).size(), is(0));
-	}
-
-	private static Thread createUpdateConnectedHostsThread(final JMatcherEntryClient entryClient) {
-		return new Thread(new Runnable() {
-			@Override
-			public void run() {
-				try {
-					Thread.sleep(500);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-				try {
-					entryClient.updateConnectingHosts();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+			assertThat(connectionClient.connect(entryKey), is(true));
+			assertThat(entryClient.getConnectingHosts().size(), is(1));
+			this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
+			this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
+			entryClient.stopInvitation();
+			this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
+			this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
+			connectionClient.cancelConnection();
+			try {
+				this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
+			} catch (Throwable t) {
+				// success
 			}
-		});
+			try {
+				this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
+			} catch (Throwable t) {
+				// success
+			}
+		}
 	}
+
+	@SuppressWarnings({ "boxing", "static-method" })
+	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionClient connectionClient, final JMatcherEntryClient entryClient) {
+		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
+		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
+		assertThat(connectionClient.sendMessage(messageFromConnectionClient), is(true));
+		final String receivedMessage = entryClient.receiveMessageFrom(connectionClientHost);
+		assertThat(receivedMessage, is(messageFromConnectionClient));
+	}
+
+	@SuppressWarnings({ "boxing", "static-method" })
+	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntryClient entryClient, final JMatcherConnectionClient connectionClient) {
+		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
+		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
+		assertThat(entryClient.sendMessageTo(connectionClientHost, messageFromEntryClient), is(true));
+		final String receivedMessage = connectionClient.receiveMessage();
+		assertThat(receivedMessage, is(messageFromEntryClient));
+	}
+
 }

@@ -21,7 +21,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.net.DatagramSocket;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.junit.Test;
@@ -34,86 +34,17 @@ public class JMatcherEntryClientTest {
 
 	/**
 	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#makeEntry()}.
+	 * {@link org.nognog.jmatcher.JMatcherEntryClient#startInvitation()}.
 	 * 
 	 * @throws Exception
 	 */
 	@Test
-	public final void testMakeEntry() throws Exception {
+	public final void testStartInvitation() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doTestMakeEntry(daemon);
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
-		} finally {
-			daemon.stop();
-			daemon.destroy();
-		}
-	}
-
-	/**
-	 * @param daemon
-	 * @throws IOException
-	 */
-	private void doTestMakeEntry(JMatcherDaemon daemon) throws IOException {
-		final String wrongJmatcherHost = "rocalhost"; //$NON-NLS-1$
-		final int wrongPort = 80;
-		final JMatcherEntryClient entryClient = new JMatcherEntryClient(wrongJmatcherHost, wrongPort);
-		assertThat(entryClient.getJmatcherHost(), is(wrongJmatcherHost));
-		assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
-		assertThat(entryClient.getConnectingHosts().size(), is(0));
-		assertThat(entryClient.getPort(), is(wrongPort));
-		assertThat(entryClient.getRetryCount(), is(JMatcherEntryClient.defalutRetryCount));
-		try {
-			entryClient.makeEntry();
-			fail();
-		} catch (IOException e) {
-			// ok
-		}
-		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		entryClient.setHost(jmatcherHost);
-
-		try {
-			entryClient.makeEntry();
-			fail();
-		} catch (IOException e) {
-			// ok
-		}
-		final int port = JMatcher.PORT;
-		entryClient.setPort(port);
-		final Integer entryKey1 = entryClient.makeEntry();
-		assertThat(entryKey1, is(not(nullValue())));
-		assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(true));
-		final Integer entryKey2 = entryClient.makeEntry();
-		assertThat(entryKey2, is(not(nullValue())));
-		assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(false));
-		assertThat(daemon.getMatchingMap().keySet().contains(entryKey2), is(true));
-		entryClient.cancelEntry();
-		daemon.setMatchingMapCapacity(0);
-		final Integer entryKey3 = entryClient.makeEntry();
-		assertThat(entryKey3, is(nullValue()));
-		assertThat(daemon.getMatchingMap().size(), is(0));
-	}
-
-	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#updateConnectingHosts()}.
-	 * 
-	 * @throws Exception
-	 */
-	@Test
-	public final void testUpdateConnectedHosts() throws Exception {
-		final JMatcherDaemon daemon = new JMatcherDaemon();
-		daemon.init(null);
-		daemon.start();
-		try {
-			this.doTestUpdateConnectedHosts(daemon);
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
+			this.doTestStartInvitation(daemon);
 		} finally {
 			daemon.stop();
 			daemon.destroy();
@@ -125,48 +56,141 @@ public class JMatcherEntryClientTest {
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	private void doTestUpdateConnectedHosts(JMatcherDaemon daemon) throws IOException {
+	private void doTestStartInvitation(JMatcherDaemon daemon) throws IOException, InterruptedException {
+		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
+		final int wrongPort = 80;
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(wrongJmatcherHost, wrongPort)) {
+			assertThat(entryClient.getJmatcherHost(), is(wrongJmatcherHost));
+			assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
+			assertThat(entryClient.getConnectingHosts().size(), is(0));
+			assertThat(entryClient.getPort(), is(wrongPort));
+			assertThat(entryClient.getRetryCount(), is(JMatcherEntryClient.defalutRetryCount));
+			// ---- Test with wrong configuration ----
+			try {
+				entryClient.startInvitation();
+				fail();
+			} catch (IOException e) {
+				// ok
+			}
+			final String jmatcherHost = "localhost"; //$NON-NLS-1$
+			entryClient.setJMatcherHost(jmatcherHost);
+
+			try {
+				entryClient.startInvitation();
+				fail();
+			} catch (IOException e) {
+				// ok
+			}
+			entryClient.setPort(JMatcher.PORT);
+			// ---- start invitation correctly ----
+			final Integer entryKey1 = entryClient.startInvitation();
+			assertThat(entryKey1, is(not(nullValue())));
+			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(true));
+			assertThat(daemon.getMatchingMap().keySet().size(), is(1));
+			// ---- start invitation in case it has already started ----
+			final Integer entryKey2 = entryClient.startInvitation();
+			assertThat(entryKey2, is(nullValue()));
+			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(true));
+			assertThat(daemon.getMatchingMap().keySet().size(), is(1));
+			// ---- stop invitation ----
+			entryClient.stopInvitation();
+			Thread.sleep(500); // wait for end of TCPClientRequestHandler
+			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(false));
+			assertThat(daemon.getMatchingMap().keySet().size(), is(0));
+			// ---- start invitation in case it still has connection in udp ----
+			final Integer entryKey3 = entryClient.startInvitation();
+			assertThat(entryKey3, is(nullValue()));
+			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(false));
+			assertThat(daemon.getMatchingMap().keySet().size(), is(0));
+
+			entryClient.closeAllConnections();
+			// ---- start invitation again after close all ----
+			final Integer entryKey4 = entryClient.startInvitation();
+			assertThat(entryKey4, is(not(nullValue())));
+			assertThat(daemon.getMatchingMap().keySet().contains(entryKey4), is(true));
+			assertThat(daemon.getMatchingMap().keySet().size(), is(1));
+
+			entryClient.closeAllConnections();
+			daemon.setMatchingMapCapacity(0);
+			// ---- start invitation in case the matching map is full ----
+			final Integer entryKey5 = entryClient.startInvitation();
+			assertThat(entryKey5, is(nullValue()));
+			assertThat(daemon.getMatchingMap().size(), is(0));
+			daemon.setMatchingMapCapacity(JMatcherDaemon.DEFAULT_MATCHING_MAP_CAPACITY);
+			// ---- start invitation after the matching map become not full ----
+			final Integer entryKey6 = entryClient.startInvitation();
+			assertThat(entryKey6, is(not(nullValue())));
+			entryClient.closeAllConnections();
+			// ---- start invitation after close entryClient without
+			// stopInvitation ----
+			final Integer entryKey7 = entryClient.startInvitation();
+			assertThat(entryKey7, is(not(nullValue())));
+			entryClient.closeAllConnections();
+			Thread.sleep(500); // wait for end of TCPClientRequestHandler
+			assertThat(daemon.getMatchingMap().keySet().size(), is(0));
+		}
+	}
+
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.JMatcherEntryClient#stopInvitation()}.
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testStartInvitationWithConnectionClient() throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestStartInvitationWithConnectionClient(daemon);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	/**
+	 * @param daemon
+	 * @throws IOException
+	 */
+	private void doTestStartInvitationWithConnectionClient(JMatcherDaemon daemon) throws IOException {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		final JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost);
-		final Integer entryKey = entryClient.makeEntry();
-		Set<Host> connectedHost = entryClient.getConnectingHosts();
-		assertThat(entryClient.updateConnectingHosts(), is(false));
-		assertThat(connectedHost.size(), is(0));
-
-		final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
-		createUpdateConnectedHostsThread(entryClient).start();
-		connectionClient.connect(entryKey);
-		assertThat(connectedHost.size(), is(1));
-
-		final int numberOfParallelConnectionClient = 5;
-		this.testConnectWithoutUpdateConnectedHosts(jmatcherHost, entryKey, numberOfParallelConnectionClient);
-		assertThat(connectedHost.size(), is(1));
-		this.testConnectWithUpdateConnectedHosts(jmatcherHost, entryKey, entryClient, numberOfParallelConnectionClient);
-		assertThat(connectedHost.size(), is(1 + numberOfParallelConnectionClient));
-		entryClient.cancelEntry();
+		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost)) {
+			final Integer entryKey = entryClient.startInvitation();
+			final int numberOfParallelConnectionClient = 10;
+			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient);
+			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
+			this.testConnect(jmatcherHost, entryKey, 1);
+			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
+			assertThat(daemon.getMatchingMap().size(), is(1));
+			entryClient.stopInvitation();
+			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
+			entryClient.closeAllConnections();
+			assertThat(entryClient.getConnectingHosts().size(), is(0));
+			try {
+				// wait for end of TCPClientRequestHandler in the daemon
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				// nothing
+			}
+			assertThat(daemon.getMatchingMap().size(), is(0));
+		}
 	}
 
-	private void testConnectWithoutUpdateConnectedHosts(final String jmatcherHost, final Integer entryKey, final int numberOfParallelConnectionClient) {
-		this.startTryingToConnectThreads(jmatcherHost, entryKey, numberOfParallelConnectionClient, false);
-	}
-
-	private void testConnectWithUpdateConnectedHosts(final String jmatcherHost, final Integer entryKey, JMatcherEntryClient entryClient, final int numberOfParallelConnectionClient) {
-		createUpdateConnectedHostsThread(entryClient).start();
-		this.startTryingToConnectThreads(jmatcherHost, entryKey, numberOfParallelConnectionClient, true);
-	}
-
-	private void startTryingToConnectThreads(final String jmatcherHost, final Integer entryKey, final int numberOfParallelConnectionClient, final boolean expectedConnect) {
-		final Thread mainThread = Thread.currentThread();
+	private void testConnect(final String jmatcherHost, final Integer entryKey, final int numberOfParallelConnectionClient) {
 		final Thread[] threads = new Thread[numberOfParallelConnectionClient];
+		final Set<Thread> failedThreads = new HashSet<>();
 		for (int i = 0; i < numberOfParallelConnectionClient; i++) {
 			threads[i] = new Thread(new Runnable() {
 				@Override
 				public void run() {
 					final JMatcherConnectionClient parallelConnectionClient = new JMatcherConnectionClient(jmatcherHost);
 					try {
-						assertThat(parallelConnectionClient.connect(entryKey), is(expectedConnect));
+						assertThat(parallelConnectionClient.connect(entryKey), is(true));
 					} catch (IOException | AssertionError e) {
-						mainThread.interrupt();
+						e.printStackTrace();
+						failedThreads.add(Thread.currentThread());
 					}
 				}
 			});
@@ -179,63 +203,6 @@ public class JMatcherEntryClientTest {
 				fail();
 			}
 		}
-	}
-
-	private static Thread createUpdateConnectedHostsThread(final JMatcherEntryClient entryClient) {
-		return new Thread(new Runnable() {
-			@Override
-			public void run() {
-				try {
-					Thread.sleep(500);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-				try {
-					entryClient.updateConnectingHosts();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		});
-	}
-
-	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#cancelEntry()}.
-	 * 
-	 * @throws Exception
-	 */
-	@Test
-	public final void testCancelEntry() throws Exception {
-		final JMatcherDaemon daemon = new JMatcherDaemon();
-		daemon.init(null);
-		daemon.start();
-		try {
-			this.doTestCancelEntry(daemon);
-		} catch (Throwable t) {
-			t.printStackTrace();
-			fail();
-		} finally {
-			daemon.stop();
-			daemon.destroy();
-		}
-	}
-
-	/**
-	 * @param daemon
-	 * @throws IOException
-	 */
-	private void doTestCancelEntry(JMatcherDaemon daemon) throws IOException {
-		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		final JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost);
-		final Integer entryKey = entryClient.makeEntry();
-
-		final int numberOfParallelConnectionClient = 10;
-		createUpdateConnectedHostsThread(entryClient).start();
-		this.startTryingToConnectThreads(jmatcherHost, entryKey, numberOfParallelConnectionClient, true);
-		assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
-		@SuppressWarnings("resource")
-		final DatagramSocket socket = entryClient.cancelEntry().getSocket();
-		assertThat(socket.isClosed(), is(false));
+		assertThat(failedThreads.size(), is(0));
 	}
 }

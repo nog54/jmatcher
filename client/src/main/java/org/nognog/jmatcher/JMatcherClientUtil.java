@@ -20,6 +20,7 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 
 import org.nognog.jmatcher.udp.request.UDPRequest;
 import org.nognog.jmatcher.udp.request.UDPRequestSerializer;
@@ -64,7 +65,7 @@ public class JMatcherClientUtil {
 		return getMessageFrom(packet);
 	}
 
-	public static DatagramPacket receiveUDPPacket(DatagramSocket socket, int buffSize) throws IOException {
+	public static DatagramPacket receiveUDPPacket(DatagramSocket socket, int buffSize) throws SocketTimeoutException, IOException {
 		final byte[] buf = new byte[buffSize];
 		final DatagramPacket packet = new DatagramPacket(buf, buf.length);
 		socket.receive(packet);
@@ -76,7 +77,11 @@ public class JMatcherClientUtil {
 	}
 
 	static JMatcherClientMessage getJMatcherMessageFrom(DatagramPacket packet) {
-		return JMatcherClientMessage.valueOf(getMessageFrom(packet));
+		try {
+			return JMatcherClientMessage.valueOf(getMessageFrom(packet));
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
 	}
 
 	public static boolean packetCameFrom(Host host, DatagramPacket packet) {
