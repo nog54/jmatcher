@@ -40,7 +40,7 @@ public class JMatcherConnectionClient {
 	private static final int defaultRetryCount = 2;
 	private static final int defaultBuffSize = 128;
 	private static final int defaultUdpSocketTimeoutMillSec = 4000;
-	private static final int maxCountOfReceivePacketsAtOneTime = 20;
+	private static final int maxCountOfReceivePacketsAtOneTime = 10;
 
 	/**
 	 * @param host
@@ -180,10 +180,10 @@ public class JMatcherConnectionClient {
 				if (packet == null) {
 					continue;
 				}
-				final JMatcherClientMessage sentJMatcherMessage = JMatcherClientUtil.getJMatcherMessageFrom(packet);
-				if (sentJMatcherMessage == JMatcherClientMessage.CONNECT_REQUEST) {
+				final JMatcherClientMessage receivedJMatcherMessage = JMatcherClientUtil.getJMatcherMessageFrom(packet);
+				if (receivedJMatcherMessage == JMatcherClientMessage.CONNECT_REQUEST) {
 					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.GOT_CONNECT_REQUEST, connectionTargetHost);
-				} else if (sentJMatcherMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
+				} else if (receivedJMatcherMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
 					this.connectingHost = connectionTargetHost;
 					return true;
 				}

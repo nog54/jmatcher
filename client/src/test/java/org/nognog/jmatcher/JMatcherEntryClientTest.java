@@ -26,6 +26,9 @@ import java.util.Set;
 
 import org.junit.Test;
 
+import mockit.Mocked;
+import mockit.Verifications;
+
 /**
  * @author goshi 2015/12/28
  */
@@ -204,5 +207,66 @@ public class JMatcherEntryClientTest {
 			}
 		}
 		assertThat(failedThreads.size(), is(0));
+	}
+
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.JMatcherEntryClient#startInvitation()}.
+	 * @param observer 
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testNotifyObservers(@Mocked JMatcherEntryClientObserver observer) throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestObservers(daemon, observer);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	/**
+	 * @param daemon
+	 * @throws IOException
+	 */
+	private void doTestObservers(JMatcherDaemon daemon, final JMatcherEntryClientObserver observer) throws Exception {
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost)) {
+			Integer key = entryClient.startInvitation();
+			JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
+			connectionClient.connect(key);
+			this.verifyCountOfNotificationOfObserver(observer, 0);
+			connectionClient.cancelConnection();
+			this.verifyCountOfNotificationOfObserver(observer, 0);
+			entryClient.addObserver(observer);
+			connectionClient.connect(key);
+			this.verifyCountOfNotificationOfObserver(observer, 1);
+			connectionClient.cancelConnection();
+			this.verifyCountOfNotificationOfObserver(observer, 2);
+			connectionClient.connect(key);
+			this.verifyCountOfNotificationOfObserver(observer, 3);
+			entryClient.stopInvitation();
+			this.verifyCountOfNotificationOfObserver(observer, 3);
+			entryClient.closeAllConnections();
+			this.verifyCountOfNotificationOfObserver(observer, 4);
+			key = entryClient.startInvitation();
+			this.verifyCountOfNotificationOfObserver(observer, 4);
+			connectionClient.connect(key);
+			this.verifyCountOfNotificationOfObserver(observer, 5);
+		}
+	}
+
+	@SuppressWarnings({ "unused", "unchecked" })
+	private void verifyCountOfNotificationOfObserver(final JMatcherEntryClientObserver observer, final int expectedTimes) {
+		new Verifications() {
+			{
+				observer.updateConnectingHosts((Set<Host>) any);
+				times = expectedTimes;
+			}
+		};
 	}
 }

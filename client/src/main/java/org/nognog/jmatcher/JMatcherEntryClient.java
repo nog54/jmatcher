@@ -66,6 +66,8 @@ public class JMatcherEntryClient implements Closeable {
 
 	private Map<Host, BlockingQueue<String>> receivedMessages;
 
+	private Set<JMatcherEntryClientObserver> observers;
+
 	static final int defalutRetryCount = 2;
 	static final int defaultBuffSize = 128;
 	static final int defaultUdpSocketTimeoutMillSec = 1000; // [msec]
@@ -94,6 +96,7 @@ public class JMatcherEntryClient implements Closeable {
 		this.connectingHosts = new HashSet<>();
 		this.socketAddressCache = new HashMap<>();
 		this.receivedMessages = new HashMap<>();
+		this.observers = new HashSet<>();
 	}
 
 	/**
@@ -171,6 +174,26 @@ public class JMatcherEntryClient implements Closeable {
 	 */
 	public void setUDPReceiveBuffSize(int udpReceiveBuffSize) {
 		this.udpReceiveBuffSize = udpReceiveBuffSize;
+	}
+
+	/**
+	 * @param observer
+	 */
+	public void addObserver(JMatcherEntryClientObserver observer) {
+		this.observers.add(observer);
+	}
+
+	/**
+	 * @param observer
+	 */
+	public void removeObserver(JMatcherEntryClientObserver observer) {
+		this.observers.remove(observer);
+	}
+
+	private void notifyObservers() {
+		for (JMatcherEntryClientObserver observer : this.observers) {
+			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts));
+		}
 	}
 
 	/**
@@ -262,9 +285,13 @@ public class JMatcherEntryClient implements Closeable {
 		}
 		this.closeUDPConnection();
 		this.requestingHosts.clear();
+		final int prevSizeOfConnectingHosts = this.connectingHosts.size();
 		this.connectingHosts.clear();
 		this.socketAddressCache.clear();
 		this.receivedMessages.clear();
+		if (prevSizeOfConnectingHosts != 0) {
+			this.notifyObservers();
+		}
 	}
 
 	private void closeTCPConnection() {
@@ -296,7 +323,7 @@ public class JMatcherEntryClient implements Closeable {
 	}
 
 	/**
-	 * request to stop invi
+	 * request to stop invitation
 	 */
 	public void stopInvitation() {
 		if (!this.isInviting()) {
@@ -409,12 +436,16 @@ public class JMatcherEntryClient implements Closeable {
 			return;
 		}
 		if (jmatcherClientMessage == JMatcherClientMessage.CANCEL) {
-			this.requestingHosts.remove(from);
-			this.connectingHosts.remove(from);
 			this.receivedMessages.remove(from);
+			this.requestingHosts.remove(from);
+			if (this.connectingHosts.remove(from)) {
+				this.notifyObservers();
+			}
 			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CANCELLED, from);
 		} else if (jmatcherClientMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST && this.requestingHosts.contains(from)) {
-			this.connectingHosts.add(from);
+			if (this.connectingHosts.add(from)) {
+				this.notifyObservers();
+			}
 			if (this.receivedMessages.get(from) == null) {
 				this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
 			}
@@ -444,6 +475,9 @@ public class JMatcherEntryClient implements Closeable {
 	private Host specifyHost(DatagramPacket packet) {
 		for (Host knownHost : this.knownHosts) {
 			final InetSocketAddress hostAddress = this.socketAddressCache.get(knownHost);
+			if (hostAddress == null) {
+				continue;
+			}
 			if (JMatcherClientUtil.packetCameFrom(hostAddress, packet)) {
 				return knownHost;
 			}
