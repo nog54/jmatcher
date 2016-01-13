@@ -29,6 +29,8 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
  */
 public class JMatcherConnectionClient {
 
+	private String name;
+
 	private String jmatcherHost;
 	private int port;
 	private int retryCount = defaultRetryCount;
@@ -38,28 +40,49 @@ public class JMatcherConnectionClient {
 	private Host connectingHost;
 
 	private static final int defaultRetryCount = 2;
-	private static final int defaultBuffSize = 128;
+	private static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
 	private static final int defaultUdpSocketTimeoutMillSec = 4000;
 	private static final int maxCountOfReceivePacketsAtOneTime = 10;
 
 	/**
+	 * @param name
 	 * @param host
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherConnectionClient(String host) {
-		this(host, JMatcher.PORT);
+	public JMatcherConnectionClient(String name, String host) {
+		this(name, host, JMatcher.PORT);
 	}
 
 	/**
+	 * @param name
 	 * @param host
 	 * @param port
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherConnectionClient(String host, int port) {
+	public JMatcherConnectionClient(String name, String host, int port) {
+		this.setName(name);
 		this.jmatcherHost = host;
 		this.port = port;
+	}
+
+	/**
+	 * @return the name
+	 */
+	public String getName() {
+		return this.name;
+	}
+
+	/**
+	 * @param name
+	 *            the name to set
+	 */
+	public void setName(String name) {
+		if (!JMatcherClientMessage.regardsAsValidName(name)) {
+			throw new IllegalArgumentException("too long name"); //$NON-NLS-1$
+		}
+		this.name = name;
 	}
 
 	/**
@@ -130,11 +153,14 @@ public class JMatcherConnectionClient {
 	}
 
 	/**
+	 * set receiveBuffSize, but the min value is restricted by
+	 * {@link JMatcherClientMessage#buffSizeToReceiveSerializedMessage}}
+	 * 
 	 * @param receiveBuffSize
 	 *            the receiveBuffSize to set
 	 */
 	public void setReceiveBuffSize(int receiveBuffSize) {
-		this.receiveBuffSize = receiveBuffSize;
+		this.receiveBuffSize = Math.max(receiveBuffSize, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
 	}
 
 	@SuppressWarnings("static-method")
@@ -173,18 +199,18 @@ public class JMatcherConnectionClient {
 	}
 
 	private boolean tryToConnectTo(final Host connectionTargetHost, final InetSocketAddress connectionTargetHostAddress) throws IOException {
-		JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.CONNECT_REQUEST, connectionTargetHost);
+		JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-				final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(connectionTargetHostAddress);
-				if (packet == null) {
+				final JMatcherClientMessage receivedJMatcherMessage = this.tryToReceiveJMatcherMessageFrom(connectionTargetHostAddress);
+				if (receivedJMatcherMessage == null) {
 					continue;
 				}
-				final JMatcherClientMessage receivedJMatcherMessage = JMatcherClientUtil.getJMatcherMessageFrom(packet);
-				if (receivedJMatcherMessage == JMatcherClientMessage.CONNECT_REQUEST) {
-					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.GOT_CONNECT_REQUEST, connectionTargetHost);
-				} else if (receivedJMatcherMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST) {
+				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.CONNECT_REQUEST) {
+					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, connectionTargetHost);
+				} else if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
 					this.connectingHost = connectionTargetHost;
+					this.connectingHost.setName(receivedJMatcherMessage.getSenderName());
 					return true;
 				}
 			}
@@ -198,7 +224,7 @@ public class JMatcherConnectionClient {
 		for (int i = 0; i < this.retryCount; i++) {
 			try {
 				JMatcherClientUtil.sendUDPRequest(this.socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherHost, this.port));
-				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, defaultBuffSize);
+				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, this.receiveBuffSize);
 				return response.getHost();
 			} catch (IOException | NullPointerException | ClassCastException e) {
 				// failed
@@ -207,12 +233,12 @@ public class JMatcherConnectionClient {
 		return null;
 	}
 
-	private DatagramPacket tryToReceiveUDPPacketFrom(InetSocketAddress hostAddress) throws IOException {
-		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, defaultBuffSize);
+	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(InetSocketAddress hostAddress) throws IOException {
+		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
 		if (JMatcherClientUtil.packetCameFrom(hostAddress, packet) == false) {
 			return null;
 		}
-		return packet;
+		return JMatcherClientUtil.getJMatcherMessageFrom(packet);
 	}
 
 	/**
@@ -234,11 +260,10 @@ public class JMatcherConnectionClient {
 		}
 		final InetSocketAddress hostAddress = new InetSocketAddress(this.connectingHost.getAddress(), this.connectingHost.getPort());
 		for (int i = 0; i < this.retryCount; i++) {
-			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessage.CANCEL, this.connectingHost);
+			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
 			try {
 				for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-					final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(hostAddress);
-					if (JMatcherClientUtil.getJMatcherMessageFrom(packet) == JMatcherClientMessage.CANCELLED) {
+					if (this.tryToReceiveJMatcherMessageFrom(hostAddress).getType() == JMatcherClientMessageType.CANCELLED) {
 						this.close(); // successful end
 						return;
 					}
@@ -276,9 +301,20 @@ public class JMatcherConnectionClient {
 			return null;
 		}
 		try {
-			return JMatcherClientUtil.receiveMessage(this.socket, this.receiveBuffSize);
+			for (int i = 0; i < this.retryCount; i++) {
+				final String receiveMessage = JMatcherClientUtil.receiveMessage(this.socket, this.receiveBuffSize);
+				if (isNotJMatcherClientMessage(receiveMessage)) {
+					return receiveMessage;
+				}
+			}
+			System.err.println("JMatcherConnectionClient : abnormal state"); //$NON-NLS-1$
+			return null;
 		} catch (IOException e) {
 			return null;
 		}
+	}
+
+	private static boolean isNotJMatcherClientMessage(final String receiveMessage) {
+		return JMatcherClientMessage.deserialize(receiveMessage) == null;
 	}
 }

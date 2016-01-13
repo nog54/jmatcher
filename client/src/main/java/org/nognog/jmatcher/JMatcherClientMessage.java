@@ -17,7 +17,93 @@ package org.nognog.jmatcher;
 /**
  * @author goshi 2015/12/27
  */
-@SuppressWarnings("javadoc")
-public enum JMatcherClientMessage {
-	CONNECT_REQUEST, GOT_CONNECT_REQUEST, CANCEL, CANCELLED
+public class JMatcherClientMessage {
+
+	private JMatcherClientMessageType type;
+	private String senderName;
+
+	/**
+	 * max length of sender name
+	 */
+	public static final int maxLengthOfSenderName = 50;
+
+	/**
+	 * enough buffSize to receive serialized JMatcherClientMessage
+	 */
+	public static final int buffSizeToReceiveSerializedMessage = 256;
+
+	/**
+	 * @param type
+	 * @param senderName
+	 */
+	public JMatcherClientMessage(JMatcherClientMessageType type, String senderName) {
+		if (!regardsAsValidName(senderName)) {
+			throw new IllegalArgumentException("senderName is too long"); //$NON-NLS-1$
+		}
+		this.type = type;
+		this.senderName = senderName;
+	}
+
+	/**
+	 * @param senderName
+	 * @return true if senderName is regarded as a valid name
+	 */
+	public static boolean regardsAsValidName(String senderName) {
+		if (senderName == null) {
+			return true;
+		}
+		return senderName.length() <= maxLengthOfSenderName;
+	}
+
+	/**
+	 * @return the type
+	 */
+	public JMatcherClientMessageType getType() {
+		return this.type;
+	}
+
+	/**
+	 * @return the senderName
+	 */
+	public String getSenderName() {
+		return this.senderName;
+	}
+
+	private static final String delimiter = "@"; //$NON-NLS-1$
+
+	/**
+	 * @param message
+	 * @return serialized message
+	 */
+	public static String serialize(JMatcherClientMessage message) {
+		final StringBuilder sb = new StringBuilder();
+		sb.append(message.getType().toString());
+		if (message.getSenderName() != null) {
+			sb.append(delimiter).append(message.getSenderName());
+		}
+		return sb.toString();
+	}
+
+	/**
+	 * @param message
+	 * @return deserialized message
+	 */
+	public static JMatcherClientMessage deserialize(String message) {
+		try {
+			final int indexOfDelimiter = message.indexOf(delimiter);
+			final String typeString;
+			final String senderNameString;
+			if (indexOfDelimiter == -1) {
+				typeString = message;
+				senderNameString = null;
+			} else {
+				typeString = message.substring(0, indexOfDelimiter);
+				senderNameString = message.substring(indexOfDelimiter + 1);
+			}
+			final JMatcherClientMessageType type = JMatcherClientMessageType.valueOf(typeString);
+			return new JMatcherClientMessage(type, senderNameString);
+		} catch (Exception e) {
+			return null;
+		}
+	}
 }

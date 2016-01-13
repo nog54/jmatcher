@@ -16,6 +16,7 @@ package org.nognog.jmatcher;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
 
@@ -38,7 +39,22 @@ public class JMatcherConnectionClientTest {
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doTestSendAndReceiveMessage(daemon);
+			this.doTestSendAndReceiveMessage(daemon, null, null);
+			this.doTestSendAndReceiveMessage(daemon, "entryCL", null); //$NON-NLS-1$
+			this.doTestSendAndReceiveMessage(daemon, null, "connectionCL"); //$NON-NLS-1$
+			this.doTestSendAndReceiveMessage(daemon, "DIADORA", "PETER"); //$NON-NLS-1$ //$NON-NLS-2$
+			try {
+				this.doTestSendAndReceiveMessage(daemon, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん", null); //$NON-NLS-1$
+				fail();
+			} catch (IllegalArgumentException e) {
+				// success
+			}
+			try {
+				this.doTestSendAndReceiveMessage(daemon, null, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん"); //$NON-NLS-1$
+				fail();
+			} catch (IllegalArgumentException e) {
+				// success
+			}
 		} finally {
 			daemon.stop();
 			daemon.destroy();
@@ -50,20 +66,24 @@ public class JMatcherConnectionClientTest {
 	 * @throws IOException
 	 */
 	@SuppressWarnings({ "boxing" })
-	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon) throws Exception {
+	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon, String entryClientName, String connectionClientName) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost)) {
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
 			final Integer entryKey = entryClient.startInvitation();
-			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
+			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost);
 			assertThat(connectionClient.connect(entryKey), is(true));
 			assertThat(entryClient.getConnectingHosts().size(), is(1));
-
+			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
+			assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
+			
 			connectionClient.cancelConnection();
 			Thread.sleep(250); // wait for entryClient to handle cancel-request
 			assertThat(entryClient.getConnectingHosts().size(), is(0));
 
 			assertThat(connectionClient.connect(entryKey), is(true));
 			assertThat(entryClient.getConnectingHosts().size(), is(1));
+			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
+			assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
 			this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
 			this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
 			entryClient.stopInvitation();

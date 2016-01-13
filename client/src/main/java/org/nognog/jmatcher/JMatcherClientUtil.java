@@ -38,8 +38,8 @@ public class JMatcherClientUtil {
 		sendUDPPacket(datagramSocket, serializedRequest, address);
 	}
 
-	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessage message, Host host) throws IOException {
-		sendUDPPacket(datagramSocket, message.toString(), new InetSocketAddress(host.getAddress(), host.getPort()));
+	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, Host host) throws IOException {
+		sendUDPPacket(datagramSocket, JMatcherClientMessage.serialize(new JMatcherClientMessage(type, senderName)), new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
 
 	public static void sendMessage(DatagramSocket datagramSocket, String message, Host host) throws IOException {
@@ -78,7 +78,7 @@ public class JMatcherClientUtil {
 
 	static JMatcherClientMessage getJMatcherMessageFrom(DatagramPacket packet) {
 		try {
-			return JMatcherClientMessage.valueOf(getMessageFrom(packet));
+			return JMatcherClientMessage.deserialize(getMessageFrom(packet));
 		} catch (IllegalArgumentException e) {
 			return null;
 		}

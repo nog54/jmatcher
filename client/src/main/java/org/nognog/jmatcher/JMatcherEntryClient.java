@@ -46,6 +46,8 @@ import org.nognog.jmatcher.udp.request.EnableEntryRequest;
  */
 public class JMatcherEntryClient implements Closeable {
 
+	private String name;
+
 	private String jmatcherHost;
 	private int port;
 	private int retryCount = defalutRetryCount;
@@ -69,26 +71,29 @@ public class JMatcherEntryClient implements Closeable {
 	private Set<JMatcherEntryClientObserver> observers;
 
 	static final int defalutRetryCount = 2;
-	static final int defaultBuffSize = 128;
+	static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
 	static final int defaultUdpSocketTimeoutMillSec = 1000; // [msec]
 	static final long intervalToUpdateRequestingHosts = 2000; // [msec]
 
 	/**
+	 * @param name
 	 * @param jmatcherHost
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherEntryClient(String jmatcherHost) {
-		this(jmatcherHost, JMatcher.PORT);
+	public JMatcherEntryClient(String name, String jmatcherHost) {
+		this(name, jmatcherHost, JMatcher.PORT);
 	}
 
 	/**
+	 * @param name
 	 * @param jmatcherHost
 	 * @param port
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherEntryClient(String jmatcherHost, int port) {
+	public JMatcherEntryClient(String name, String jmatcherHost, int port) {
+		this.setName(name);
 		this.jmatcherHost = jmatcherHost;
 		this.port = port;
 		this.knownHosts = new HashSet<>();
@@ -97,6 +102,24 @@ public class JMatcherEntryClient implements Closeable {
 		this.socketAddressCache = new HashMap<>();
 		this.receivedMessages = new HashMap<>();
 		this.observers = new HashSet<>();
+	}
+
+	/**
+	 * @return the name
+	 */
+	public String getName() {
+		return this.name;
+	}
+
+	/**
+	 * @param name
+	 *            the name to set
+	 */
+	public void setName(String name) {
+		if (!JMatcherClientMessage.regardsAsValidName(name)) {
+			throw new IllegalArgumentException("too long name"); //$NON-NLS-1$
+		}
+		this.name = name;
 	}
 
 	/**
@@ -169,11 +192,14 @@ public class JMatcherEntryClient implements Closeable {
 	}
 
 	/**
+	 * set UDPReceiveBuffSize, but the min value is restricted by
+	 * {@link JMatcherClientMessage#buffSizeToReceiveSerializedMessage}}
+	 * 
 	 * @param udpReceiveBuffSize
 	 *            the udpReceiveBuffSize to set
 	 */
 	public void setUDPReceiveBuffSize(int udpReceiveBuffSize) {
-		this.udpReceiveBuffSize = udpReceiveBuffSize;
+		this.udpReceiveBuffSize = Math.max(udpReceiveBuffSize, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
 	}
 
 	/**
@@ -404,7 +430,7 @@ public class JMatcherEntryClient implements Closeable {
 	private void sendHolePunchingMessage() throws IOException {
 		final Set<Host> requestingNotConnectingHosts = this.getRequestingNotConnectingHosts();
 		for (Host requestingNotConnectingHost : requestingNotConnectingHosts) {
-			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CONNECT_REQUEST, requestingNotConnectingHost);
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, requestingNotConnectingHost);
 		}
 	}
 
@@ -435,21 +461,22 @@ public class JMatcherEntryClient implements Closeable {
 			this.storeMessageIfFromConnectingHost(packet, from);
 			return;
 		}
-		if (jmatcherClientMessage == JMatcherClientMessage.CANCEL) {
+		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.CANCEL) {
 			this.receivedMessages.remove(from);
 			this.requestingHosts.remove(from);
 			if (this.connectingHosts.remove(from)) {
 				this.notifyObservers();
 			}
-			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.CANCELLED, from);
-		} else if (jmatcherClientMessage == JMatcherClientMessage.GOT_CONNECT_REQUEST && this.requestingHosts.contains(from)) {
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
+		} else if (jmatcherClientMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST && this.requestingHosts.contains(from)) {
 			if (this.connectingHosts.add(from)) {
+				from.setName(jmatcherClientMessage.getSenderName());
 				this.notifyObservers();
 			}
 			if (this.receivedMessages.get(from) == null) {
 				this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
 			}
-			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessage.GOT_CONNECT_REQUEST, from);
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
 		}
 	}
 

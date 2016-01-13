@@ -62,7 +62,7 @@ public class JMatcherEntryClientTest {
 	private void doTestStartInvitation(JMatcherDaemon daemon) throws IOException, InterruptedException {
 		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
 		final int wrongPort = 80;
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(wrongJmatcherHost, wrongPort)) {
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(null, wrongJmatcherHost, wrongPort)) {
 			assertThat(entryClient.getJmatcherHost(), is(wrongJmatcherHost));
 			assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
 			assertThat(entryClient.getConnectingHosts().size(), is(0));
@@ -159,7 +159,7 @@ public class JMatcherEntryClientTest {
 	 */
 	private void doTestStartInvitationWithConnectionClient(JMatcherDaemon daemon) throws IOException {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost)) {
+		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
 			final Integer entryKey = entryClient.startInvitation();
 			final int numberOfParallelConnectionClient = 10;
 			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient);
@@ -188,7 +188,7 @@ public class JMatcherEntryClientTest {
 			threads[i] = new Thread(new Runnable() {
 				@Override
 				public void run() {
-					final JMatcherConnectionClient parallelConnectionClient = new JMatcherConnectionClient(jmatcherHost);
+					final JMatcherConnectionClient parallelConnectionClient = new JMatcherConnectionClient(null, jmatcherHost);
 					try {
 						assertThat(parallelConnectionClient.connect(entryKey), is(true));
 					} catch (IOException | AssertionError e) {
@@ -212,7 +212,8 @@ public class JMatcherEntryClientTest {
 	/**
 	 * Test method for
 	 * {@link org.nognog.jmatcher.JMatcherEntryClient#startInvitation()}.
-	 * @param observer 
+	 * 
+	 * @param observer
 	 * 
 	 * @throws Exception
 	 */
@@ -235,9 +236,9 @@ public class JMatcherEntryClientTest {
 	 */
 	private void doTestObservers(JMatcherDaemon daemon, final JMatcherEntryClientObserver observer) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(jmatcherHost)) {
+		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
 			Integer key = entryClient.startInvitation();
-			JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(jmatcherHost);
+			JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(null, jmatcherHost);
 			connectionClient.connect(key);
 			this.verifyCountOfNotificationOfObserver(observer, 0);
 			connectionClient.cancelConnection();

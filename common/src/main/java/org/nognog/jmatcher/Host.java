@@ -25,6 +25,7 @@ public class Host implements Serializable {
 	 * 
 	 */
 	private static final long serialVersionUID = -3927320884948684639L;
+	private String name;
 	private String address;
 	private int port;
 
@@ -33,8 +34,18 @@ public class Host implements Serializable {
 	 * @param port
 	 */
 	public Host(String address, int port) {
+		this(address, port, null);
+	}
+
+	/**
+	 * @param address
+	 * @param port
+	 * @param name
+	 */
+	public Host(String address, int port, String name) {
 		this.address = address;
 		this.port = port;
+		this.name = name;
 	}
 
 	/**
@@ -65,6 +76,21 @@ public class Host implements Serializable {
 	 */
 	public void setPort(int port) {
 		this.port = port;
+	}
+
+	/**
+	 * @return the name
+	 */
+	public String getName() {
+		return this.name;
+	}
+
+	/**
+	 * @param name
+	 *            the name to set
+	 */
+	public void setName(String name) {
+		this.name = name;
 	}
 
 	@Override
