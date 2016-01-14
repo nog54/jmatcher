@@ -208,7 +208,12 @@ public class JMatcherConnectionClient {
 				}
 				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.CONNECT_REQUEST) {
 					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, connectionTargetHost);
-				} else if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
+					continue;
+				}
+				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL) {
+					return false;
+				}
+				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
 					this.connectingHost = connectionTargetHost;
 					this.connectingHost.setName(receivedJMatcherMessage.getSenderName());
 					return true;

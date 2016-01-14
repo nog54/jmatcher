@@ -51,6 +51,7 @@ public class JMatcherEntryClient implements Closeable {
 	private String jmatcherHost;
 	private int port;
 	private int retryCount = defalutRetryCount;
+	private int maxSizeOfConnectingHosts = Integer.MAX_VALUE;
 	protected Thread communicationThread;
 	protected boolean isStoppingCommunication;
 
@@ -60,8 +61,7 @@ public class JMatcherEntryClient implements Closeable {
 	private DatagramSocket udpSocket;
 	private int udpReceiveBuffSize = defaultBuffSize;
 
-	// knownHosts ⊇ requestingHosts ⊇ connectingHosts
-	private Set<Host> knownHosts;
+	// these sets are designed to be requestingHosts ∩ connectingHosts = Φ.
 	private Set<Host> requestingHosts;
 	private Set<Host> connectingHosts;
 	private Map<Host, InetSocketAddress> socketAddressCache;
@@ -96,7 +96,6 @@ public class JMatcherEntryClient implements Closeable {
 		this.setName(name);
 		this.jmatcherHost = jmatcherHost;
 		this.port = port;
-		this.knownHosts = new HashSet<>();
 		this.requestingHosts = new HashSet<>();
 		this.connectingHosts = new HashSet<>();
 		this.socketAddressCache = new HashMap<>();
@@ -172,6 +171,21 @@ public class JMatcherEntryClient implements Closeable {
 	 */
 	public void setRetryCount(int retryCount) {
 		this.retryCount = retryCount;
+	}
+
+	/**
+	 * @return the maxSizeOfConnectingHosts
+	 */
+	public int getMaxSizeOfConnectingHosts() {
+		return this.maxSizeOfConnectingHosts;
+	}
+
+	/**
+	 * @param maxSizeOfConnectingHosts
+	 *            the maxNumberOfConnectingHosts to set
+	 */
+	public void setMaxSizeOfConnectingHosts(int maxSizeOfConnectingHosts) {
+		this.maxSizeOfConnectingHosts = maxSizeOfConnectingHosts;
 	}
 
 	@SuppressWarnings("unused")
@@ -377,7 +391,7 @@ public class JMatcherEntryClient implements Closeable {
 		try {
 			long lastUpdatedTime = 0;
 			while (!this.isStoppingCommunication) {
-				if (this.isInviting() && this.isTheTimeToUpdateRuestingHosts(lastUpdatedTime)) {
+				if (this.isInviting() && this.connectingHosts.size() < this.maxSizeOfConnectingHosts && this.isTheTimeToUpdateRuestingHosts(lastUpdatedTime)) {
 					try {
 						this.updateRequestingHosts();
 					} catch (IOException e) {
@@ -411,7 +425,6 @@ public class JMatcherEntryClient implements Closeable {
 			if (newRequestingHosts != null) {
 				for (Host newRequestingHost : newRequestingHosts) {
 					this.requestingHosts.add(newRequestingHost);
-					this.knownHosts.add(newRequestingHost);
 					this.socketAddressCache.put(newRequestingHost, new InetSocketAddress(newRequestingHost.getAddress(), newRequestingHost.getPort()));
 				}
 			}
@@ -462,22 +475,37 @@ public class JMatcherEntryClient implements Closeable {
 			return;
 		}
 		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.CANCEL) {
-			this.receivedMessages.remove(from);
-			this.requestingHosts.remove(from);
-			if (this.connectingHosts.remove(from)) {
-				this.notifyObservers(UpdateEvent.REMOVE, from);
-			}
-			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
-		} else if (jmatcherClientMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST && this.requestingHosts.contains(from)) {
-			if (this.connectingHosts.add(from)) {
-				from.setName(jmatcherClientMessage.getSenderName());
-				this.notifyObservers(UpdateEvent.ADD, from);
-			}
-			if (this.receivedMessages.get(from) == null) {
-				this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
-			}
-			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
+			this.handleCancelMessage(from);
+			return;
+		}  
+		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
+			this.handleGotConnectRequestMessage(from, jmatcherClientMessage);
+			return;
 		}
+	}
+
+	private void handleCancelMessage(final Host from) throws IOException {
+		this.requestingHosts.remove(from);
+		this.socketAddressCache.remove(from);
+		if (this.connectingHosts.remove(from)) {
+			this.receivedMessages.remove(from);
+			this.notifyObservers(UpdateEvent.REMOVE, from);
+		}
+		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
+	}
+	
+	private void handleGotConnectRequestMessage(final Host from, final JMatcherClientMessage jmatcherClientMessage) throws IOException {
+		if (this.connectingHosts.size() >= this.maxSizeOfConnectingHosts) {
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL, this.name, from);
+			return;
+		}
+		if (this.connectingHosts.add(from)) {
+			from.setName(jmatcherClientMessage.getSenderName());
+			this.requestingHosts.remove(from);
+			this.notifyObservers(UpdateEvent.ADD, from);
+			this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
+		}
+		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
 	}
 
 	private void storeMessageIfFromConnectingHost(final DatagramPacket packet, final Host from) {
@@ -500,13 +528,22 @@ public class JMatcherEntryClient implements Closeable {
 	 *         host
 	 */
 	private Host specifyHost(DatagramPacket packet) {
-		for (Host knownHost : this.knownHosts) {
-			final InetSocketAddress hostAddress = this.socketAddressCache.get(knownHost);
+		for (Host connectingHost : this.connectingHosts) {
+			final InetSocketAddress hostAddress = this.socketAddressCache.get(connectingHost);
 			if (hostAddress == null) {
 				continue;
 			}
 			if (JMatcherClientUtil.packetCameFrom(hostAddress, packet)) {
-				return knownHost;
+				return connectingHost;
+			}
+		}
+		for (Host requestingHost : this.requestingHosts) {
+			final InetSocketAddress hostAddress = this.socketAddressCache.get(requestingHost);
+			if (hostAddress == null) {
+				continue;
+			}
+			if (JMatcherClientUtil.packetCameFrom(hostAddress, packet)) {
+				return requestingHost;
 			}
 		}
 		return null;

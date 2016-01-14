@@ -21,11 +21,15 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 
 import org.junit.Test;
 
+import mockit.Deencapsulation;
 import mockit.Mocked;
 import mockit.Verifications;
 
@@ -47,7 +51,7 @@ public class JMatcherEntryClientTest {
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doTestStartInvitation(daemon);
+			this.doStartInvitation(daemon);
 		} finally {
 			daemon.stop();
 			daemon.destroy();
@@ -59,7 +63,7 @@ public class JMatcherEntryClientTest {
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	private void doTestStartInvitation(JMatcherDaemon daemon) throws IOException, InterruptedException {
+	private void doStartInvitation(JMatcherDaemon daemon) throws IOException, InterruptedException {
 		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
 		final int wrongPort = 80;
 		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(null, wrongJmatcherHost, wrongPort)) {
@@ -141,12 +145,12 @@ public class JMatcherEntryClientTest {
 	 * @throws Exception
 	 */
 	@Test
-	public final void testStartInvitationWithConnectionClient() throws Exception {
+	public final void testInvitationWithConnectionClient() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doTestStartInvitationWithConnectionClient(daemon);
+			this.doTestInvitationWithConnectionClient(daemon);
 		} finally {
 			daemon.stop();
 			daemon.destroy();
@@ -157,14 +161,19 @@ public class JMatcherEntryClientTest {
 	 * @param daemon
 	 * @throws IOException
 	 */
-	private void doTestStartInvitationWithConnectionClient(JMatcherDaemon daemon) throws IOException {
+	private void doTestInvitationWithConnectionClient(JMatcherDaemon daemon) throws IOException {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		this.testInvitationWithFixedMaxSizeOfConnectingHosts(daemon, jmatcherHost);
+		this.testInvitationWithUnfixedMaxSizeOfConnectingHosts(jmatcherHost);
+	}
+
+	private void testInvitationWithFixedMaxSizeOfConnectingHosts(JMatcherDaemon daemon, final String jmatcherHost) throws IOException {
 		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
 			final Integer entryKey = entryClient.startInvitation();
 			final int numberOfParallelConnectionClient = 10;
-			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient);
+			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient, numberOfParallelConnectionClient);
 			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
-			this.testConnect(jmatcherHost, entryKey, 1);
+			this.testConnect(jmatcherHost, entryKey, 1, 1);
 			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
 			assertThat(daemon.getMatchingMap().size(), is(1));
 			entryClient.stopInvitation();
@@ -181,7 +190,57 @@ public class JMatcherEntryClientTest {
 		}
 	}
 
-	private void testConnect(final String jmatcherHost, final Integer entryKey, final int numberOfParallelConnectionClient) {
+	private void testInvitationWithUnfixedMaxSizeOfConnectingHosts(final String jmatcherHost) throws IOException {
+		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
+			final int numberOfParallelConnectionClient = 20;
+			final int maxSizeOfConnectingHosts1 = 15;
+			entryClient.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts1);
+			final Integer entryKey = entryClient.startInvitation();
+
+			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient, maxSizeOfConnectingHosts1);
+			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts1));
+
+			final int maxSizeOfConnectingHosts2 = 24;
+			entryClient.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts2);
+			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient, maxSizeOfConnectingHosts2 - maxSizeOfConnectingHosts1);
+			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts2));
+
+			final int maxSizeOfConnectingHosts3 = 22;
+			entryClient.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts3);
+			this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient, 0);
+			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts2));
+
+			final int removeCountOfClient = maxSizeOfConnectingHosts2 / 2;
+			removeConnectingHostsForcibly(entryClient, removeCountOfClient);
+			try {
+				this.testConnect(jmatcherHost, entryKey, numberOfParallelConnectionClient, maxSizeOfConnectingHosts3 - (maxSizeOfConnectingHosts2 - removeCountOfClient));
+			} finally {
+				System.out.println(entryClient.getConnectingHosts().size());
+			}
+			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts3));
+		}
+	}
+
+	/**
+	 * @param entryClient
+	 * @param removeCountOfClient
+	 */
+	private static void removeConnectingHostsForcibly(JMatcherEntryClient entryClient, int removeCountOfClient) {
+		final Set<Host> connectingHosts = Deencapsulation.getField(entryClient, "connectingHosts"); //$NON-NLS-1$
+		final Map<Host, InetSocketAddress> socketAddressCache = Deencapsulation.getField(entryClient, "socketAddressCache"); //$NON-NLS-1$
+		final Map<Host, BlockingQueue<String>> receivedMessages = Deencapsulation.getField(entryClient, "receivedMessages"); //$NON-NLS-1$
+		int count = 0;
+		for (Host host : entryClient.getConnectingHosts()) {
+			if (count++ >= removeCountOfClient) {
+				break;
+			}
+			connectingHosts.remove(host);
+			socketAddressCache.remove(host);
+			receivedMessages.remove(host);
+		}
+	}
+
+	private void testConnect(final String jmatcherHost, final Integer entryKey, final int numberOfParallelConnectionClient, int expectSuccessCount) {
 		final Thread[] threads = new Thread[numberOfParallelConnectionClient];
 		final Set<Thread> failedThreads = new HashSet<>();
 		for (int i = 0; i < numberOfParallelConnectionClient; i++) {
@@ -206,7 +265,7 @@ public class JMatcherEntryClientTest {
 				fail();
 			}
 		}
-		assertThat(failedThreads.size(), is(0));
+		assertThat(failedThreads.size(), is(numberOfParallelConnectionClient - expectSuccessCount));
 	}
 
 	/**
