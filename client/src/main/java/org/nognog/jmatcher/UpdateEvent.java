@@ -14,18 +14,10 @@
 
 package org.nognog.jmatcher;
 
-import java.util.Set;
-
 /**
- * @author goshi 2016/01/12
+ * @author goshi 2016/01/14
  */
-public interface JMatcherEntryClientObserver {
-	/**
-	 * update connecting hosts
-	 * 
-	 * @param connectingHosts
-	 * @param event 
-	 * @param target 
-	 */
-	void updateConnectingHosts(Set<Host> connectingHosts, UpdateEvent event, Host target);
+@SuppressWarnings("javadoc")
+public enum UpdateEvent {
+	ADD, REMOVE, CLEAR
 }

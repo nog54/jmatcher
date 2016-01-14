@@ -265,7 +265,7 @@ public class JMatcherEntryClientTest {
 	private void verifyCountOfNotificationOfObserver(final JMatcherEntryClientObserver observer, final int expectedTimes) {
 		new Verifications() {
 			{
-				observer.updateConnectingHosts((Set<Host>) any);
+				observer.updateConnectingHosts((Set<Host>) any, (UpdateEvent) any, (Host) any);
 				times = expectedTimes;
 			}
 		};

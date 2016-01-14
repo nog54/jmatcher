@@ -216,9 +216,9 @@ public class JMatcherEntryClient implements Closeable {
 		this.observers.remove(observer);
 	}
 
-	private void notifyObservers() {
+	private void notifyObservers(UpdateEvent event, Host target) {
 		for (JMatcherEntryClientObserver observer : this.observers) {
-			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts));
+			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts), event, target);
 		}
 	}
 
@@ -316,7 +316,7 @@ public class JMatcherEntryClient implements Closeable {
 		this.socketAddressCache.clear();
 		this.receivedMessages.clear();
 		if (prevSizeOfConnectingHosts != 0) {
-			this.notifyObservers();
+			this.notifyObservers(UpdateEvent.CLEAR, null);
 		}
 	}
 
@@ -465,13 +465,13 @@ public class JMatcherEntryClient implements Closeable {
 			this.receivedMessages.remove(from);
 			this.requestingHosts.remove(from);
 			if (this.connectingHosts.remove(from)) {
-				this.notifyObservers();
+				this.notifyObservers(UpdateEvent.REMOVE, from);
 			}
 			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
 		} else if (jmatcherClientMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST && this.requestingHosts.contains(from)) {
 			if (this.connectingHosts.add(from)) {
 				from.setName(jmatcherClientMessage.getSenderName());
-				this.notifyObservers();
+				this.notifyObservers(UpdateEvent.ADD, from);
 			}
 			if (this.receivedMessages.get(from) == null) {
 				this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
