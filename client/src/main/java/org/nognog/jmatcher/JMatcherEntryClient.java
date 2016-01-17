@@ -49,7 +49,7 @@ public class JMatcherEntryClient implements Closeable {
 	private String name;
 
 	private String jmatcherHost;
-	private int port;
+	private int jmatcherHostPort;
 	private int retryCount = defalutRetryCount;
 	private int maxSizeOfConnectingHosts = Integer.MAX_VALUE;
 	protected Thread communicationThread;
@@ -95,7 +95,7 @@ public class JMatcherEntryClient implements Closeable {
 	public JMatcherEntryClient(String name, String jmatcherHost, int port) {
 		this.setName(name);
 		this.jmatcherHost = jmatcherHost;
-		this.port = port;
+		this.jmatcherHostPort = port;
 		this.requestingHosts = new HashSet<>();
 		this.connectingHosts = new HashSet<>();
 		this.socketAddressCache = new HashMap<>();
@@ -139,16 +139,16 @@ public class JMatcherEntryClient implements Closeable {
 	/**
 	 * @return the port
 	 */
-	public int getPort() {
-		return this.port;
+	public int getJMatcherHostPort() {
+		return this.jmatcherHostPort;
 	}
 
 	/**
 	 * @param port
 	 *            the port to set
 	 */
-	public void setPort(int port) {
-		this.port = port;
+	public void setJMatcherHostPort(int port) {
+		this.jmatcherHostPort = port;
 	}
 
 	/**
@@ -283,7 +283,7 @@ public class JMatcherEntryClient implements Closeable {
 	}
 
 	private void createTCPConnection() throws UnknownHostException, IOException, SocketException {
-		this.tcpSocket = new Socket(this.jmatcherHost, this.port);
+		this.tcpSocket = new Socket(this.jmatcherHost, this.jmatcherHostPort);
 		this.setupTCPSocket(this.tcpSocket);
 		this.oos = new ObjectOutputStream(this.tcpSocket.getOutputStream());
 		this.ois = new ObjectInputStream(this.tcpSocket.getInputStream());
@@ -307,7 +307,7 @@ public class JMatcherEntryClient implements Closeable {
 	}
 
 	private boolean enableEntry(final Integer keyNumber) throws IOException, ClassNotFoundException {
-		JMatcherClientUtil.sendUDPRequest(this.udpSocket, new EnableEntryRequest(keyNumber), new InetSocketAddress(this.jmatcherHost, this.port));
+		JMatcherClientUtil.sendUDPRequest(this.udpSocket, new EnableEntryRequest(keyNumber), new InetSocketAddress(this.jmatcherHost, this.jmatcherHostPort));
 		final TCPResponse response = (TCPResponse) this.ois.readObject();
 		if (response == PlainTCPResponse.COMPLETE_ENTRY) {
 			return true;
@@ -477,7 +477,7 @@ public class JMatcherEntryClient implements Closeable {
 		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.CANCEL) {
 			this.handleCancelMessage(from);
 			return;
-		}  
+		}
 		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
 			this.handleGotConnectRequestMessage(from, jmatcherClientMessage);
 			return;
@@ -493,7 +493,7 @@ public class JMatcherEntryClient implements Closeable {
 		}
 		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
 	}
-	
+
 	private void handleGotConnectRequestMessage(final Host from, final JMatcherClientMessage jmatcherClientMessage) throws IOException {
 		if (this.connectingHosts.size() >= this.maxSizeOfConnectingHosts) {
 			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL, this.name, from);
@@ -591,6 +591,16 @@ public class JMatcherEntryClient implements Closeable {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Get using udpSocket. You should be careful when you use this method. It
+	 * might cause unexpected error.
+	 * 
+	 * @return udpSocket
+	 */
+	public DatagramSocket getUDPSocket() {
+		return this.udpSocket;
 	}
 
 	@Override

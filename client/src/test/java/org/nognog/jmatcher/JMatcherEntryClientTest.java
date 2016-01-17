@@ -70,7 +70,7 @@ public class JMatcherEntryClientTest {
 			assertThat(entryClient.getJmatcherHost(), is(wrongJmatcherHost));
 			assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
 			assertThat(entryClient.getConnectingHosts().size(), is(0));
-			assertThat(entryClient.getPort(), is(wrongPort));
+			assertThat(entryClient.getJMatcherHostPort(), is(wrongPort));
 			assertThat(entryClient.getRetryCount(), is(JMatcherEntryClient.defalutRetryCount));
 			// ---- Test with wrong configuration ----
 			try {
@@ -88,7 +88,7 @@ public class JMatcherEntryClientTest {
 			} catch (IOException e) {
 				// ok
 			}
-			entryClient.setPort(JMatcher.PORT);
+			entryClient.setJMatcherHostPort(JMatcher.PORT);
 			// ---- start invitation correctly ----
 			final Integer entryKey1 = entryClient.startInvitation();
 			assertThat(entryKey1, is(not(nullValue())));
