@@ -49,6 +49,7 @@ public class JMatcherEntryClientTest {
 	public final void testStartInvitation() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
+		daemon.setEnabledToReturnSpecialInternalAddress(false);
 		daemon.start();
 		try {
 			this.doStartInvitation(daemon);
@@ -148,6 +149,7 @@ public class JMatcherEntryClientTest {
 	public final void testInvitationWithConnectionClient() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
+		daemon.setEnabledToReturnSpecialInternalAddress(false);
 		daemon.start();
 		try {
 			this.doTestInvitationWithConnectionClient(daemon);
@@ -280,6 +282,7 @@ public class JMatcherEntryClientTest {
 	public final void testNotifyObservers(@Mocked JMatcherEntryClientObserver observer) throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
+		daemon.setEnabledToReturnSpecialInternalAddress(false);
 		daemon.start();
 		try {
 			this.doTestObservers(daemon, observer);

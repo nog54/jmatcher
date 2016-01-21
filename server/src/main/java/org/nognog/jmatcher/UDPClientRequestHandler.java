@@ -132,26 +132,32 @@ public class UDPClientRequestHandler implements Runnable {
 			this.sendResponse(new ConnectionResponse(null));
 			return;
 		}
-		final Integer connectionTargetKeyNumber = this.getRealKeyNumber(request.getKeyNumber());
+		final Integer connectionTargetKeyNumber = this.getRealKeyNumberInstance(request.getKeyNumber());
 		if (connectionTargetKeyNumber == null) {
 			this.sendResponse(new ConnectionResponse(null));
 			return;
 		}
+		final boolean useSpecialInternalAddress = this.jmatcherDaemon.isEnabledToReturnSpecialInternalAddress() && targetHost.getAddress().equals(this.getClientHostAddress());
 		try {
-			this.waitToMatchConnectionTiming(connectionTargetKeyNumber);
+			this.waitToMatchConnectionTiming(connectionTargetKeyNumber, useSpecialInternalAddress);
 		} catch (TimeoutException e) {
 			this.sendResponse(new ConnectionResponse(null));
 			return;
 		}
-
-		this.sendResponse(new ConnectionResponse(targetHost));
+		final ConnectionResponse response;
+		if (useSpecialInternalAddress) {
+			response = new ConnectionResponse(new Host(SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.getAddress(), targetHost.getPort()));
+		} else {
+			response = new ConnectionResponse(targetHost);
+		}
+		this.sendResponse(response);
 	}
 
 	/**
 	 * @param requestKeyNumber
 	 * @return real key number, which is contained in the matchingMap
 	 */
-	private Integer getRealKeyNumber(Integer requestKeyNumber) {
+	private Integer getRealKeyNumberInstance(Integer requestKeyNumber) {
 		for (Integer key : this.matchingMap.keySet()) {
 			if (key.equals(requestKeyNumber)) {
 				return key;
@@ -162,14 +168,18 @@ public class UDPClientRequestHandler implements Runnable {
 
 	/**
 	 * @param connectionTargetKeyNumber
+	 * @param useSpecialInternalAddress
 	 */
-	private void waitToMatchConnectionTiming(Integer connectionTargetKeyNumber) throws TimeoutException {
+	private void waitToMatchConnectionTiming(Integer connectionTargetKeyNumber, boolean useSpecialInternalAddress) throws TimeoutException {
 		final CopyOnWriteArraySet<RequestingConnectionHostHandler> newSet = new CopyOnWriteArraySet<>();
 		synchronized (connectionTargetKeyNumber) {
 			final CopyOnWriteArraySet<RequestingConnectionHostHandler> previousSettedSet = this.waitingForSyncHandlersMap.putIfAbsent(connectionTargetKeyNumber, newSet);
-			final Host requestingConnectionHost = this.getClientHost();
+			final Host requestingConnectionHost = this.createClientHostInstance();
+			if (useSpecialInternalAddress) {
+				requestingConnectionHost.setAddress(SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.getAddress());
+			}
 			final RequestingConnectionHostHandler waitingHandler = new RequestingConnectionHostHandler(Thread.currentThread(), requestingConnectionHost);
-			if (previousSettedSet == null) { // putted new set
+			if (previousSettedSet == null) { // in case new set is put
 				newSet.add(waitingHandler);
 			} else {
 				previousSettedSet.add(waitingHandler);
@@ -183,8 +193,16 @@ public class UDPClientRequestHandler implements Runnable {
 		throw new TimeoutException();
 	}
 
-	private Host getClientHost() {
-		return new Host(this.clientAddress.getAddress().getHostAddress(), this.clientAddress.getPort());
+	private Host createClientHostInstance() {
+		return new Host(this.getClientHostAddress(), this.getClientHostPort());
+	}
+
+	private String getClientHostAddress() {
+		return this.clientAddress.getAddress().getHostAddress();
+	}
+
+	private int getClientHostPort() {
+		return this.clientAddress.getPort();
 	}
 
 	/**
@@ -205,10 +223,10 @@ public class UDPClientRequestHandler implements Runnable {
 	 * @param request
 	 */
 	private void handleEnableEntryRequest(EnableEntryRequest request) {
-		final Integer keyNumber = getRealKeyNumber(request.getKeyNumber());
+		final Integer keyNumber = getRealKeyNumberInstance(request.getKeyNumber());
 		synchronized (keyNumber) {
 			if (this.matchingMap.get(keyNumber) instanceof PreEntryHost) {
-				this.matchingMap.put(keyNumber, this.getClientHost());
+				this.matchingMap.put(keyNumber, this.createClientHostInstance());
 				keyNumber.notifyAll();
 			}
 		}

@@ -120,6 +120,7 @@ public class ClientRequestHandlerTest {
 			final int numberOfIterations = 1;
 			for (int i = 0; i < numberOfIterations; i++) {
 				this.doPreEntryTestWithMultiThread(daemon);
+				
 			}
 		} finally {
 			daemon.stop();

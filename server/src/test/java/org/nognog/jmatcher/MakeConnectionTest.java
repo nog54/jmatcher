@@ -67,6 +67,14 @@ public class MakeConnectionTest {
 		daemon.init(null);
 		daemon.start();
 		try {
+			daemon.setEnabledToReturnSpecialInternalAddress(true);
+			try {
+				this.doConnectTest(daemon);
+				fail();
+			} catch (AssertionError e) {
+				// success
+			}
+			daemon.setEnabledToReturnSpecialInternalAddress(false);
 			this.doConnectTest(daemon);
 		} finally {
 			daemon.stop();

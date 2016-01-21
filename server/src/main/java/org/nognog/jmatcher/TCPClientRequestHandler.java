@@ -22,7 +22,6 @@ import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.TimeoutException;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -30,8 +29,8 @@ import org.apache.logging.log4j.Logger;
 import org.nognog.jmatcher.tcp.request.PlainTCPRequest;
 import org.nognog.jmatcher.tcp.request.TCPRequest;
 import org.nognog.jmatcher.tcp.response.CheckConnectionResponse;
-import org.nognog.jmatcher.tcp.response.PreEntryResponse;
 import org.nognog.jmatcher.tcp.response.PlainTCPResponse;
+import org.nognog.jmatcher.tcp.response.PreEntryResponse;
 
 /**
  * @author goshi 2015/10/31
@@ -68,11 +67,19 @@ public class TCPClientRequestHandler implements Runnable {
 		this.waitingForSyncHandlersMap = this.jmatcherDaemon.getWaitingHandlersMap();
 		this.socket = socket;
 		this.number = number;
-		this.name = new StringBuilder().append("TCP(").append(this.number).append(")").toString(); //$NON-NLS-1$ //$NON-NLS-2$
+		this.name = createConcatenatedString("TCP(", Integer.valueOf(this.number), ")"); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	private static String createConcatenatedString(Object... objs) {
+		final StringBuilder sb = new StringBuilder();
+		for (Object str : objs) {
+			sb.append(str);
+		}
+		return sb.toString();
 	}
 
 	private void log(String message, Level level) {
-		logger.log(level, createLappedMessage(message));
+		logger.log(level, this.createLappedMessage(message));
 	}
 
 	private void log(Throwable t, Level level) {
@@ -80,13 +87,11 @@ public class TCPClientRequestHandler implements Runnable {
 	}
 
 	private void log(String message, Throwable t, Level level) {
-		logger.log(level, createLappedMessage(message), t);
+		logger.log(level, this.createLappedMessage(message), t);
 	}
 
 	private String createLappedMessage(String message) {
-		final StringBuilder sb = new StringBuilder();
-		sb.append(this.name).append(" ").append(message); //$NON-NLS-1$
-		return sb.toString();
+		return createConcatenatedString(this.name, " ", message); //$NON-NLS-1$
 	}
 
 	@Override
@@ -123,29 +128,23 @@ public class TCPClientRequestHandler implements Runnable {
 	}
 
 	private void handleEntryRequest(ObjectInputStream ois, ObjectOutputStream oos) throws IOException, ClassNotFoundException {
-		final boolean putted;
-		synchronized (TCPClientRequestHandler.class) {
-			this.entryKeyNumber = this.createUnregistedKeyNumber();
-			if (this.entryKeyNumber != null) {
-				this.matchingMap.put(this.entryKeyNumber, new PreEntryHost(this.socket.getInetAddress().getHostAddress(), this.socket.getPort()));
-				putted = true;
-			} else {
-				putted = false;
-			}
-		}
-		if (!putted) {
+		if (this.putPreEntryHostWithNewEntryKey() == false) {
 			sendFailureResponse(oos);
 			return;
 		}
-		final StringBuilder sb = new StringBuilder();
-		sb.append("PreEntry : ").append(this.entryKeyNumber).append(" = ").append(this.matchingMap.get(this.entryKeyNumber)); //$NON-NLS-1$ //$NON-NLS-2$
-		this.log(sb.toString(), Level.INFO);
+		this.log(createConcatenatedString("PreEntry : ", this.entryKeyNumber, " = ", this.matchingMap.get(this.entryKeyNumber)), Level.INFO); //$NON-NLS-1$ //$NON-NLS-2$
 		final PreEntryResponse entryResponse = new PreEntryResponse(this.entryKeyNumber);
 		oos.writeObject(entryResponse);
 		try {
 			this.waitForUDPEntry();
-		} catch (TimeoutException e) {
-			String timeoutMessage = new StringBuilder().append(": ").append(this.entryKeyNumber).append(" timeout").toString(); //$NON-NLS-1$ //$NON-NLS-2$
+		} catch (InterruptedException e) {
+			final String unexpectedInterruptMessage = createConcatenatedString(": ", this.entryKeyNumber, " expected interruptation"); //$NON-NLS-1$ //$NON-NLS-2$
+			this.log(unexpectedInterruptMessage, Level.ERROR);
+			return;
+		}
+		final boolean isTimeout = this.matchingMap.get(this.entryKeyNumber) instanceof PreEntryHost;
+		if (isTimeout) {
+			final String timeoutMessage = createConcatenatedString(": ", this.entryKeyNumber, " timeout"); //$NON-NLS-1$ //$NON-NLS-2$
 			this.log(timeoutMessage, Level.INFO);
 			return;
 		}
@@ -154,21 +153,20 @@ public class TCPClientRequestHandler implements Runnable {
 		this.communicateWithRegisteredClientLoop(ois, oos);
 	}
 
-	/**
-	 * 
-	 */
-	private void waitForUDPEntry() throws TimeoutException {
-		try {
-			final long startTime = System.currentTimeMillis();
-			synchronized (this.entryKeyNumber) {
-				this.entryKeyNumber.wait(WAIT_TIME_FOR_UDP_ENTRY);
+	private boolean putPreEntryHostWithNewEntryKey() {
+		synchronized (TCPClientRequestHandler.class) {
+			this.entryKeyNumber = this.createUnregistedKeyNumber();
+			if (this.entryKeyNumber != null) {
+				this.matchingMap.put(this.entryKeyNumber, new PreEntryHost(this.socket.getInetAddress().getHostAddress(), this.socket.getPort()));
+				return true;
 			}
-			final long waitedTime = System.currentTimeMillis() - startTime;
-			if (waitedTime >= WAIT_TIME_FOR_UDP_ENTRY) {
-				throw new TimeoutException();
-			}
-		} catch (InterruptedException e) {
-			// complete udp entry
+			return false;
+		}
+	}
+
+	private void waitForUDPEntry() throws InterruptedException {
+		synchronized (this.entryKeyNumber) {
+			this.entryKeyNumber.wait(WAIT_TIME_FOR_UDP_ENTRY);
 		}
 	}
 
@@ -180,7 +178,7 @@ public class TCPClientRequestHandler implements Runnable {
 				try {
 					request = (TCPRequest) readObject;
 				} catch (ClassCastException e) {
-					this.log(readObject.toString(), Level.ERROR);
+					this.log(createConcatenatedString("invalid request : ", readObject), Level.ERROR); //$NON-NLS-1$
 					return;
 				}
 				if (request == PlainTCPRequest.CHECK_CONNECTION_REQUEST) {

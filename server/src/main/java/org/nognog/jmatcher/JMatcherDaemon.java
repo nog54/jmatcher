@@ -51,6 +51,7 @@ public class JMatcherDaemon implements Daemon {
 	private ConcurrentMap<Integer, CopyOnWriteArraySet<RequestingConnectionHostHandler>> waitingForSyncHandlersMap;
 	private int matchingMapCapacity;
 	private int boundOfKeyNumber; // exclusive
+	private boolean enabledToReturnSpecialInternalAddress;
 
 	private Logger logger;
 	private TCPServerThread tcpServerThread;
@@ -67,6 +68,7 @@ public class JMatcherDaemon implements Daemon {
 		this.waitingForSyncHandlersMap = new ConcurrentHashMap<>();
 		this.matchingMapCapacity = DEFAULT_MATCHING_MAP_CAPACITY;
 		this.boundOfKeyNumber = DEFAULT_BOUND_OF_KEY_NUMBER;
+		this.setEnabledToReturnSpecialInternalAddress(true);
 		this.tcpServerThread = new TCPServerThread(this);
 		this.udpServerThread = new UDPServerThread(this);
 		this.logger.info("initialized"); //$NON-NLS-1$
@@ -157,16 +159,23 @@ public class JMatcherDaemon implements Daemon {
 	}
 
 	/**
-	 * 
+	 * @return the enableToReturnSpecialInternalAddress
 	 */
-	public void logMatchingMap() {
-		this.logger.info(this.matchingMap);
+	public boolean isEnabledToReturnSpecialInternalAddress() {
+		return this.enabledToReturnSpecialInternalAddress;
+	}
+
+	/**
+	 * @param enabledToReturnSpecialInternalAddress the enableToReturnSpecialInternalAddress to set
+	 */
+	public void setEnabledToReturnSpecialInternalAddress(boolean enabledToReturnSpecialInternalAddress) {
+		this.enabledToReturnSpecialInternalAddress = enabledToReturnSpecialInternalAddress;
 	}
 
 	/**
 	 * 
 	 */
-	public void logWaitingForSyncHandlersMap() {
-		this.logger.info(this.waitingForSyncHandlersMap);
+	public void logMatchingMap() {
+		this.logger.info(this.matchingMap);
 	}
 }

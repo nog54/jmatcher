@@ -15,10 +15,9 @@
 package org.nognog.jmatcher;
 
 /**
- * @author goshi
- * 2015/12/24
+ * @author goshi 2015/12/24
  */
-public class PreEntryHost extends Host{
+public class PreEntryHost extends Host {
 
 	/**
 	 * 
