@@ -39,7 +39,11 @@ public class JMatcherClientUtil {
 	}
 
 	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, Host host) throws IOException {
-		sendUDPPacket(datagramSocket, JMatcherClientMessage.serialize(new JMatcherClientMessage(type, senderName)), new InetSocketAddress(host.getAddress(), host.getPort()));
+		sendJMatcherClientMessage(datagramSocket, type, senderName, new InetSocketAddress(host.getAddress(), host.getPort()));
+	}
+	
+	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, InetSocketAddress address) throws IOException {
+		sendUDPPacket(datagramSocket, JMatcherClientMessage.serialize(new JMatcherClientMessage(type, senderName)), address);
 	}
 
 	public static void sendMessage(DatagramSocket datagramSocket, String message, Host host) throws IOException {

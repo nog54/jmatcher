@@ -93,6 +93,18 @@ public class Host implements Serializable {
 		this.name = name;
 	}
 
+	/**
+	 * @param host
+	 * @return true if they have same address and port
+	 */
+	public boolean equals(Host host) {
+		if (this.address == null) {
+			return false;
+		}
+		return this.address.equals(host.address) && this.port == host.port;
+
+	}
+
 	@Override
 	public String toString() {
 		if (this.address == null) {

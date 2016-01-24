@@ -34,10 +34,10 @@ public class ProductEnvironmentTest {
 		final String jmatcherHost = "nog-jserver1.servehttp.com"; //$NON-NLS-1$
 		final String entryClientName = "Darjeeling"; //$NON-NLS-1$
 		final String connectionClientName = "EarlGrey"; //$NON-NLS-1$
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) { 
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
 			final Integer entryKey = entryClient.startInvitation();
 			System.out.println("Product Environment test : invite with " + entryKey); //$NON-NLS-1$
-			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost); 
+			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost);
 			assertThat(connectionClient.connect(entryKey), is(true));
 			assertThat(entryClient.getConnectingHosts().size(), is(1));
 			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));

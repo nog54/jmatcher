@@ -17,7 +17,10 @@ package org.nognog.jmatcher;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 
@@ -31,8 +34,9 @@ public class JMatcherConnectionClient {
 
 	private String name;
 
-	private String jmatcherHost;
-	private int port;
+	private String jmatcherServer;
+	private int jmatcherServerPort;
+	private int internalNetworkPortTellerPort = JMatcher.PORT;
 	private int retryCount = defaultRetryCount;
 	private int receiveBuffSize = defaultBuffSize;
 
@@ -63,8 +67,8 @@ public class JMatcherConnectionClient {
 	 */
 	public JMatcherConnectionClient(String name, String host, int port) {
 		this.setName(name);
-		this.jmatcherHost = host;
-		this.port = port;
+		this.jmatcherServer = host;
+		this.jmatcherServerPort = port;
 	}
 
 	/**
@@ -86,33 +90,33 @@ public class JMatcherConnectionClient {
 	}
 
 	/**
-	 * @return the jmatcher host
+	 * @return the jmatcherServer
 	 */
-	public String getJmatcherHost() {
-		return this.jmatcherHost;
+	public String getJmatcherServer() {
+		return this.jmatcherServer;
 	}
 
 	/**
-	 * @param jmatcherHost
-	 *            the jmatcherHost to set
+	 * @param jmatcherServer
+	 *            the jmatcherServer to set
 	 */
-	public void setJmatcherHost(String jmatcherHost) {
-		this.jmatcherHost = jmatcherHost;
+	public void setJmatcherServer(String jmatcherServer) {
+		this.jmatcherServer = jmatcherServer;
 	}
 
 	/**
-	 * @return the port
+	 * @return the jmatcherServerPort
 	 */
-	public int getPort() {
-		return this.port;
+	public int getJmatcherServerPort() {
+		return this.jmatcherServerPort;
 	}
 
 	/**
-	 * @param port
-	 *            the port to set
+	 * @param jmatcherServerPort
+	 *            the jmatcherServerPort to set
 	 */
-	public void setPort(int port) {
-		this.port = port;
+	public void setJmatcherServerPort(int jmatcherServerPort) {
+		this.jmatcherServerPort = jmatcherServerPort;
 	}
 
 	/**
@@ -170,6 +174,23 @@ public class JMatcherConnectionClient {
 	}
 
 	/**
+	 * @return the internalNetworkPortTellerPort
+	 */
+	public int getInternalNetworkPortTellerPort() {
+		return this.internalNetworkPortTellerPort;
+	}
+
+	/**
+	 * It has to be called before {@link #connect(int)}
+	 * 
+	 * @param internalNetworkPortTellerPort
+	 *            the internalNetworkPortTellerPort to set
+	 */
+	public void setInternalNetworkPortTellerPort(int internalNetworkPortTellerPort) {
+		this.internalNetworkPortTellerPort = internalNetworkPortTellerPort;
+	}
+
+	/**
 	 * @param key
 	 * @return true if success
 	 * @throws IOException
@@ -179,13 +200,18 @@ public class JMatcherConnectionClient {
 		try {
 			this.socket = new DatagramSocket();
 			this.setupUDPSocket(this.socket);
-			final Host connectionTargetHost = this.getTargetHostFromServer(key);
+			Host connectionTargetHost = this.getTargetHostFromServer(key);
 			if (connectionTargetHost == null) {
 				return false;
 			}
-			final InetSocketAddress connectionTargetHostAddress = new InetSocketAddress(connectionTargetHost.getAddress(), connectionTargetHost.getPort());
+			if (SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.equals(connectionTargetHost.getAddress())) {
+				connectionTargetHost = this.findInternalNetworkEntryHost(key);
+				if (connectionTargetHost == null) {
+					return false;
+				}
+			}
 			for (int i = 0; i < this.retryCount; i++) {
-				final boolean success = this.tryToConnectTo(connectionTargetHost, connectionTargetHostAddress);
+				final boolean success = this.tryToConnectTo(connectionTargetHost);
 				if (success) {
 					return true;
 				}
@@ -198,7 +224,45 @@ public class JMatcherConnectionClient {
 		}
 	}
 
-	private boolean tryToConnectTo(final Host connectionTargetHost, final InetSocketAddress connectionTargetHostAddress) throws IOException {
+	private Host getTargetHostFromServer(int key) {
+		for (int i = 0; i < this.retryCount; i++) {
+			try {
+				JMatcherClientUtil.sendUDPRequest(this.socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherServer, this.jmatcherServerPort));
+				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, this.receiveBuffSize);
+				return response.getHost();
+			} catch (IOException | NullPointerException | ClassCastException e) {
+				// failed
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * @param key
+	 * @return
+	 */
+	private Host findInternalNetworkEntryHost(int key) {
+		try {
+			for (final InterfaceAddress networkInterface : NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getInterfaceAddresses()) {
+				try {
+					final InetSocketAddress broadcastSocketAddress = new InetSocketAddress(networkInterface.getBroadcast(), this.internalNetworkPortTellerPort);
+					JMatcherClientUtil.sendMessage(this.socket, String.valueOf(key), broadcastSocketAddress);
+					final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
+					final int toldPort = Integer.valueOf(JMatcherClientUtil.getMessageFrom(packet)).intValue();
+					final String address = packet.getAddress().getHostAddress();
+					return new Host(address, toldPort);
+				} catch (NumberFormatException | IOException e) {
+					// when toldPort was invalid or the broadcast didn't reach
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	private boolean tryToConnectTo(final Host connectionTargetHost) throws IOException {
+		final InetSocketAddress connectionTargetHostAddress = new InetSocketAddress(connectionTargetHost.getAddress(), connectionTargetHost.getPort());
 		JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
@@ -223,19 +287,6 @@ public class JMatcherConnectionClient {
 			// one of the end conditions
 		}
 		return false;
-	}
-
-	private Host getTargetHostFromServer(int key) {
-		for (int i = 0; i < this.retryCount; i++) {
-			try {
-				JMatcherClientUtil.sendUDPRequest(this.socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherHost, this.port));
-				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, this.receiveBuffSize);
-				return response.getHost();
-			} catch (IOException | NullPointerException | ClassCastException e) {
-				// failed
-			}
-		}
-		return null;
 	}
 
 	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(InetSocketAddress hostAddress) throws IOException {

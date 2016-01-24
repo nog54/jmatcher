@@ -15,8 +15,10 @@
 package org.nognog.jmatcher;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.*;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
@@ -37,21 +39,20 @@ public class JMatcherConnectionClientTest {
 	public final void testSendAndReceiveMessage() throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
-		daemon.setEnabledToReturnSpecialInternalAddress(false);
 		daemon.start();
 		try {
-			this.doTestSendAndReceiveMessage(daemon, null, null);
-			this.doTestSendAndReceiveMessage(daemon, "entryCL", null); //$NON-NLS-1$
-			this.doTestSendAndReceiveMessage(daemon, null, "connectionCL"); //$NON-NLS-1$
-			this.doTestSendAndReceiveMessage(daemon, "DIADORA", "PETER"); //$NON-NLS-1$ //$NON-NLS-2$
+			this.doTestSendAndReceiveMessage(daemon, null, null, JMatcher.PORT - 1);
+			this.doTestSendAndReceiveMessage(daemon, "entryCL", null, JMatcher.PORT - 1); //$NON-NLS-1$
+			this.doTestSendAndReceiveMessage(daemon, null, "connectionCL", JMatcher.PORT - 1); //$NON-NLS-1$
+			this.doTestSendAndReceiveMessage(daemon, "DIADORA", "PETER", JMatcher.PORT - 1); //$NON-NLS-1$ //$NON-NLS-2$
 			try {
-				this.doTestSendAndReceiveMessage(daemon, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん", null); //$NON-NLS-1$
+				this.doTestSendAndReceiveMessage(daemon, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん", null, JMatcher.PORT - 1); //$NON-NLS-1$
 				fail();
 			} catch (IllegalArgumentException e) {
 				// success
 			}
 			try {
-				this.doTestSendAndReceiveMessage(daemon, null, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん"); //$NON-NLS-1$
+				this.doTestSendAndReceiveMessage(daemon, null, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん", JMatcher.PORT - 1); //$NON-NLS-1$
 				fail();
 			} catch (IllegalArgumentException e) {
 				// success
@@ -67,16 +68,19 @@ public class JMatcherConnectionClientTest {
 	 * @throws IOException
 	 */
 	@SuppressWarnings({ "boxing" })
-	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon, String entryClientName, String connectionClientName) throws Exception {
+	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon, String entryClientName, String connectionClientName, int portTellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
 		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
+			entryClient.setPortTellerPort(portTellerPort);
 			final Integer entryKey = entryClient.startInvitation();
+			assertThat(entryKey, is(not(nullValue())));
 			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost);
+			connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
 			assertThat(connectionClient.connect(entryKey), is(true));
 			assertThat(entryClient.getConnectingHosts().size(), is(1));
 			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
 			assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
-			
+
 			connectionClient.cancelConnection();
 			Thread.sleep(250); // wait for entryClient to handle cancel-request
 			assertThat(entryClient.getConnectingHosts().size(), is(0));
