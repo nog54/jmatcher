@@ -251,6 +251,7 @@ public class JMatcherEntryClientTest {
 		final AtomicInteger failedThreadsCount = new AtomicInteger(0);
 		for (int i = 0; i < numberOfParallelConnectionClients; i++) {
 			threads[i] = new Thread(new Runnable() {
+				@SuppressWarnings("resource")
 				@Override
 				public void run() {
 					final JMatcherConnectionClient parallelConnectionClient = new JMatcherConnectionClient(null, jmatcherHost);
@@ -306,27 +307,28 @@ public class JMatcherEntryClientTest {
 			entryClient.setPortTellerPort(tellerPort);
 			Integer key = entryClient.startInvitation();
 			assertThat(key, is(not(nullValue())));
-			JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(null, jmatcherHost);
-			connectionClient.setInternalNetworkPortTellerPort(tellerPort);
-			connectionClient.connect(key);
-			this.verifyCountOfNotificationOfObserver(observer, 0);
-			connectionClient.cancelConnection();
-			this.verifyCountOfNotificationOfObserver(observer, 0);
-			entryClient.addObserver(observer);
-			connectionClient.connect(key);
-			this.verifyCountOfNotificationOfObserver(observer, 1);
-			connectionClient.cancelConnection();
-			this.verifyCountOfNotificationOfObserver(observer, 2);
-			connectionClient.connect(key);
-			this.verifyCountOfNotificationOfObserver(observer, 3);
-			entryClient.stopInvitation();
-			this.verifyCountOfNotificationOfObserver(observer, 3);
-			entryClient.closeAllConnections();
-			this.verifyCountOfNotificationOfObserver(observer, 4);
-			key = entryClient.startInvitation();
-			this.verifyCountOfNotificationOfObserver(observer, 4);
-			connectionClient.connect(key);
-			this.verifyCountOfNotificationOfObserver(observer, 5);
+			try (JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(null, jmatcherHost)) {
+				connectionClient.setInternalNetworkPortTellerPort(tellerPort);
+				connectionClient.connect(key);
+				this.verifyCountOfNotificationOfObserver(observer, 0);
+				connectionClient.cancelConnection();
+				this.verifyCountOfNotificationOfObserver(observer, 0);
+				entryClient.addObserver(observer);
+				connectionClient.connect(key);
+				this.verifyCountOfNotificationOfObserver(observer, 1);
+				connectionClient.cancelConnection();
+				this.verifyCountOfNotificationOfObserver(observer, 2);
+				connectionClient.connect(key);
+				this.verifyCountOfNotificationOfObserver(observer, 3);
+				entryClient.stopInvitation();
+				this.verifyCountOfNotificationOfObserver(observer, 3);
+				entryClient.closeAllConnections();
+				this.verifyCountOfNotificationOfObserver(observer, 4);
+				key = entryClient.startInvitation();
+				this.verifyCountOfNotificationOfObserver(observer, 4);
+				connectionClient.connect(key);
+				this.verifyCountOfNotificationOfObserver(observer, 5);
+			}
 		}
 	}
 

@@ -14,6 +14,7 @@
 
 package org.nognog.jmatcher.client;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -33,7 +34,7 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
 /**
  * @author goshi 2015/11/27
  */
-public class JMatcherConnectionClient {
+public class JMatcherConnectionClient implements Closeable {
 
 	private String name;
 
@@ -205,11 +206,13 @@ public class JMatcherConnectionClient {
 			this.setupUDPSocket(this.socket);
 			Host connectionTargetHost = this.getTargetHostFromServer(key);
 			if (connectionTargetHost == null) {
+				this.closeForcibly();
 				return false;
 			}
 			if (SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.equals(connectionTargetHost.getAddress())) {
 				connectionTargetHost = this.findInternalNetworkEntryHost(key);
 				if (connectionTargetHost == null) {
+					this.closeForcibly();
 					return false;
 				}
 			}
@@ -219,10 +222,10 @@ public class JMatcherConnectionClient {
 					return true;
 				}
 			}
-			this.close();
+			this.closeForcibly();
 			return false;
 		} catch (IOException e) {
-			this.close();
+			this.closeForcibly();
 			throw e;
 		}
 	}
@@ -233,7 +236,7 @@ public class JMatcherConnectionClient {
 				JMatcherClientUtil.sendUDPRequest(this.socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherServer, this.jmatcherServerPort));
 				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, this.receiveBuffSize);
 				return response.getHost();
-			} catch (IOException | NullPointerException | ClassCastException e) {
+			} catch (Exception e) {
 				// failed
 			}
 		}
@@ -303,10 +306,19 @@ public class JMatcherConnectionClient {
 	/**
 	 * 
 	 */
-	private void close() {
+	private void closeForcibly() {
 		JMatcherClientUtil.close(this.socket);
 		this.socket = null;
 		this.connectingHost = null;
+	}
+
+	@Override
+	public void close() {
+		try {
+			this.cancelConnection();
+		} catch (IOException e) {
+			this.closeForcibly();
+		}
 	}
 
 	/**
@@ -323,7 +335,7 @@ public class JMatcherConnectionClient {
 			try {
 				for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
 					if (this.tryToReceiveJMatcherMessageFrom(hostAddress).getType() == JMatcherClientMessageType.CANCELLED) {
-						this.close(); // successful end
+						this.closeForcibly(); // successful end
 						return;
 					}
 				}
@@ -331,7 +343,7 @@ public class JMatcherConnectionClient {
 				// one of the end conditions
 			}
 		}
-		this.close(); // force end
+		this.closeForcibly(); // force end
 		return;
 	}
 

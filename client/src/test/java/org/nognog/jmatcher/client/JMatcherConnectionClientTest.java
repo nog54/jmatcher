@@ -77,36 +77,38 @@ public class JMatcherConnectionClientTest {
 			entryClient.setPortTellerPort(portTellerPort);
 			final Integer entryKey = entryClient.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
-			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost);
-			connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
-			assertThat(connectionClient.connect(entryKey), is(true));
-			assertThat(entryClient.getConnectingHosts().size(), is(1));
-			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
-			assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
+			try (JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost)) {
+				connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
+				assertThat(connectionClient.connect(entryKey), is(true));
+				assertThat(entryClient.getConnectingHosts().size(), is(1));
+				assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
+				assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
 
-			connectionClient.cancelConnection();
-			Thread.sleep(250); // wait for entryClient to handle cancel-request
-			assertThat(entryClient.getConnectingHosts().size(), is(0));
+				connectionClient.cancelConnection();
+				Thread.sleep(250); // wait for entryClient to handle
+									// cancel-request
+				assertThat(entryClient.getConnectingHosts().size(), is(0));
 
-			assertThat(connectionClient.connect(entryKey), is(true));
-			assertThat(entryClient.getConnectingHosts().size(), is(1));
-			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
-			assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
-			this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
-			this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
-			entryClient.stopInvitation();
-			this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
-			this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
-			connectionClient.cancelConnection();
-			try {
+				assertThat(connectionClient.connect(entryKey), is(true));
+				assertThat(entryClient.getConnectingHosts().size(), is(1));
+				assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
+				assertThat(connectionClient.getConnectingHost().getName(), is(entryClientName));
 				this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
-			} catch (Throwable t) {
-				// success
-			}
-			try {
 				this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
-			} catch (Throwable t) {
-				// success
+				entryClient.stopInvitation();
+				this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
+				this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
+				connectionClient.cancelConnection();
+				try {
+					this.testSendMessageFromConnectionClientToEntryClient(connectionClient, entryClient);
+				} catch (Throwable t) {
+					// success
+				}
+				try {
+					this.testSendMessageFromEntryClientToConnectionClient(entryClient, connectionClient);
+				} catch (Throwable t) {
+					// success
+				}
 			}
 		}
 	}

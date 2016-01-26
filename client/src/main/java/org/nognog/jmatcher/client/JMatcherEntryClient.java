@@ -299,12 +299,14 @@ public class JMatcherEntryClient implements Closeable {
 				this.setupTCPConnection();
 				final Integer keyNumber = this.makePreEntry();
 				if (keyNumber == null) {
+					this.closeAllConnections();
 					return null;
 				}
 				this.setupUDPConnection();
 				if (this.enableEntry(keyNumber)) {
 					this.startPortTellerThread();
 					if (this.portTellerThread == null) {
+						this.closeAllConnections();
 						return null;
 					}
 					this.startCommunicationThread();
