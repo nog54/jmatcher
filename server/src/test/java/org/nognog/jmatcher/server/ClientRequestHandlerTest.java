@@ -12,7 +12,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.server;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.junit.Test;
+import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.tcp.request.PlainTCPRequest;
 import org.nognog.jmatcher.tcp.request.TCPRequest;
 import org.nognog.jmatcher.tcp.response.PlainTCPResponse;

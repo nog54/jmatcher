@@ -12,7 +12,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.server;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -20,6 +20,7 @@ import java.net.Socket;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.nognog.jmatcher.JMatcher;
 
 /**
  * @author goshi 2015/12/22

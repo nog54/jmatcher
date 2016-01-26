@@ -1,4 +1,4 @@
-/** Copyright 2015 Goshi Noguchi (noggon54@gmail.com)
+/** Copyright 2016 Goshi Noguchi (noggon54@gmail.com)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -12,70 +12,33 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.client;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
+import org.junit.Ignore;
 import org.junit.Test;
+import org.nognog.jmatcher.Host;
 
 /**
- * @author goshi 2015/12/29
+ * @author goshi 2016/01/20
  */
-public class JMatcherConnectionClientTest {
+@Ignore
+@SuppressWarnings({ "boxing", "javadoc" })
+public class ProductEnvironmentTest {
 
-	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherConnectionClient#connect(int)}.
-	 * 
-	 * @throws Exception
-	 */
 	@Test
-	public final void testSendAndReceiveMessage() throws Exception {
-		final JMatcherDaemon daemon = new JMatcherDaemon();
-		daemon.init(null);
-		daemon.start();
-		try {
-			this.doTestSendAndReceiveMessage(daemon, null, null, JMatcher.PORT - 1);
-			this.doTestSendAndReceiveMessage(daemon, "entryCL", null, JMatcher.PORT - 1); //$NON-NLS-1$
-			this.doTestSendAndReceiveMessage(daemon, null, "connectionCL", JMatcher.PORT - 1); //$NON-NLS-1$
-			this.doTestSendAndReceiveMessage(daemon, "DIADORA", "PETER", JMatcher.PORT - 1); //$NON-NLS-1$ //$NON-NLS-2$
-			try {
-				this.doTestSendAndReceiveMessage(daemon, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん", null, JMatcher.PORT - 1); //$NON-NLS-1$
-				fail();
-			} catch (IllegalArgumentException e) {
-				// success
-			}
-			try {
-				this.doTestSendAndReceiveMessage(daemon, null, "tooLongEntryClientNameあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやいゆえよらりるれろわをん", JMatcher.PORT - 1); //$NON-NLS-1$
-				fail();
-			} catch (IllegalArgumentException e) {
-				// success
-			}
-		} finally {
-			daemon.stop();
-			daemon.destroy();
-		}
-	}
-
-	/**
-	 * @param daemon
-	 * @throws IOException
-	 */
-	@SuppressWarnings({ "boxing" })
-	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon, String entryClientName, String connectionClientName, int portTellerPort) throws Exception {
-		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+	public void testMakeConnection() throws IOException, InterruptedException {
+		final String jmatcherHost = "nog-jserver1.servehttp.com"; //$NON-NLS-1$
+		final String entryClientName = "Darjeeling"; //$NON-NLS-1$
+		final String connectionClientName = "EarlGrey"; //$NON-NLS-1$
 		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
-			entryClient.setPortTellerPort(portTellerPort);
 			final Integer entryKey = entryClient.startInvitation();
-			assertThat(entryKey, is(not(nullValue())));
+			System.out.println("Product Environment test : invite with " + entryKey); //$NON-NLS-1$
 			final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost);
-			connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
 			assertThat(connectionClient.connect(entryKey), is(true));
 			assertThat(entryClient.getConnectingHosts().size(), is(1));
 			assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
@@ -108,7 +71,7 @@ public class JMatcherConnectionClientTest {
 		}
 	}
 
-	@SuppressWarnings({ "boxing", "static-method" })
+	@SuppressWarnings({ "static-method" })
 	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionClient connectionClient, final JMatcherEntryClient entryClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
@@ -117,7 +80,7 @@ public class JMatcherConnectionClientTest {
 		assertThat(receivedMessage, is(messageFromConnectionClient));
 	}
 
-	@SuppressWarnings({ "boxing", "static-method" })
+	@SuppressWarnings({ "static-method" })
 	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntryClient entryClient, final JMatcherConnectionClient connectionClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
@@ -125,5 +88,4 @@ public class JMatcherConnectionClientTest {
 		final String receivedMessage = connectionClient.receiveMessage();
 		assertThat(receivedMessage, is(messageFromEntryClient));
 	}
-
 }

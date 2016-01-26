@@ -12,7 +12,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.client;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
@@ -28,6 +28,9 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
+import org.nognog.jmatcher.Host;
+import org.nognog.jmatcher.JMatcher;
+import org.nognog.jmatcher.server.JMatcherDaemon;
 
 import mockit.Deencapsulation;
 import mockit.Mocked;

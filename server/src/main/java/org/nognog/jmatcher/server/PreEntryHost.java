@@ -12,38 +12,26 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.server;
+
+import org.nognog.jmatcher.Host;
 
 /**
- * @author goshi 2015/12/20
+ * @author goshi 2015/12/24
  */
-public class RequestingConnectionHostHandler {
-	private final Thread thread;
-	private final Host host;
+public class PreEntryHost extends Host {
 
 	/**
-	 * @param thread
-	 * @param host
+	 * 
 	 */
-	public RequestingConnectionHostHandler(Thread thread, Host host) {
-		if (thread == null || host == null) {
-			throw new IllegalArgumentException();
-		}
-		this.thread = thread;
-		this.host = host;
-	}
+	private static final long serialVersionUID = 5090773062924902151L;
 
 	/**
-	 * @return the thread
+	 * @param address
+	 * @param port
 	 */
-	public Thread getThread() {
-		return this.thread;
+	public PreEntryHost(String address, int port) {
+		super(address, port);
 	}
 
-	/**
-	 * @return the host
-	 */
-	public Host getHost() {
-		return this.host;
-	}
 }

@@ -12,7 +12,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.server;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -26,6 +26,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.tcp.request.PlainTCPRequest;
 import org.nognog.jmatcher.tcp.request.TCPRequest;
 import org.nognog.jmatcher.tcp.response.CheckConnectionResponse;

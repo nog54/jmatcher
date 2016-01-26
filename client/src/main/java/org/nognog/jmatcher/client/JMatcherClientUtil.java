@@ -12,7 +12,7 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License. */
 
-package org.nognog.jmatcher;
+package org.nognog.jmatcher.client;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 
+import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.udp.request.UDPRequest;
 import org.nognog.jmatcher.udp.request.UDPRequestSerializer;
 import org.nognog.jmatcher.udp.response.UDPResponse;
