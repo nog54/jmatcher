@@ -103,7 +103,141 @@ public class InvitationServiceClientTest {
 	 * Test method for
 	 * {@link org.nognog.jmatcher.client.service.InvitationServiceClient#connect(int, org.nognog.jmatcher.client.service.EndListener)}
 	 * .
-	 * @param listener 
+	 * 
+	 * @param listener
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testCancelConnection(@Mocked EndListener<Void> listener) throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient("Colombia", "localhost")) { //$NON-NLS-1$ //$NON-NLS-2$
+			final int portTellerPort = JMatcher.PORT - 1;
+			entryClient.setPortTellerPort(portTellerPort);
+			final Integer key = entryClient.startInvitation();
+			this.doTestCancelConnectionSuite(key, portTellerPort);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	/**
+	 * @param key
+	 * @param portTellerPort
+	 * @param listener
+	 * @throws InterruptedException
+	 */
+	private void doTestCancelConnectionSuite(Integer key, int portTellerPort) throws Exception {
+		try (JMatcherConnectionClient jmatcherConnectionClient = new JMatcherConnectionClient("Crystal mountain", "localhost")) { //$NON-NLS-1$ //$NON-NLS-2$
+			jmatcherConnectionClient.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final InvitationServiceClient client = new InvitationServiceClient(jmatcherConnectionClient)) {
+				// before connect
+				this.doTestCancelConnection(client, false);
+
+				// cancel while trying to connect
+				client.connect(key, null);
+				this.doTestCancelConnection(client, false);
+				client.close();
+				
+				// cancel after connecting
+				this.makeUpConnection(key, client);
+				this.doTestCancelConnection(client, true);
+
+				// closed while cancelling
+				this.makeUpConnection(key, client);
+				this.doTestCancelConnectionWithClose(client, false);
+			}
+		}
+	}
+
+	private void doTestCancelConnection(final InvitationServiceClient client, boolean expected) throws InterruptedException {
+		final AtomicBoolean actual = new AtomicBoolean();
+		final EndListener<Void> listener = new EndListener<Void>() {
+			@Override
+			public void success(Void result) {
+				actual.set(true);
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+
+			@Override
+			public void failure(Exception e) {
+				actual.set(false);
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+		};
+		client.cancelConnection(listener);
+		synchronized (this) {
+			this.wait();
+		}
+		assertThat(actual.get(), is(expected));
+	}
+	
+	private void doTestCancelConnectionWithClose(final InvitationServiceClient client, boolean expected) throws InterruptedException {
+		final AtomicBoolean actual = new AtomicBoolean();
+		final EndListener<Void> listener = new EndListener<Void>() {
+			@Override
+			public void success(Void result) {
+				actual.set(true);
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+
+			@Override
+			public void failure(Exception e) {
+				actual.set(false);
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+		};
+		client.cancelConnection(listener);
+		client.close();
+		synchronized (this) {
+			this.wait();
+		}
+		assertThat(actual.get(), is(expected));
+	}
+	
+	/**
+	 * @param client
+	 * @throws InterruptedException 
+	 */
+	private void makeUpConnection(int key, InvitationServiceClient client) throws InterruptedException {
+		final EndListener<Void> listener = new EndListener<Void>() {
+			@Override
+			public void success(Void result) {
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+
+			@Override
+			public void failure(Exception e) {
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+		};
+		client.connect(key, listener);
+		synchronized (this) {
+			this.wait();
+		}
+	}
+
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.service.InvitationServiceClient#connect(int, org.nognog.jmatcher.client.service.EndListener)}
+	 * .
+	 * 
+	 * @param listener
 	 * 
 	 * @throws Exception
 	 */
@@ -176,8 +310,10 @@ public class InvitationServiceClientTest {
 		client.connect(key, mockListener);
 		new Verifications() {
 			{
-				mockListener.success((Void) any); times = 0;
-				mockListener.failure((Exception) any); times = 0;
+				mockListener.success((Void) any);
+				times = 0;
+				mockListener.failure((Exception) any);
+				times = 0;
 			}
 		};
 		assertThat(client.getConnectingHost(), is(nullValue()));
@@ -186,8 +322,10 @@ public class InvitationServiceClientTest {
 		Thread.sleep(2000);
 		new Verifications() {
 			{
-				mockListener.success((Void) any); times = 0;
-				mockListener.failure((Exception) any); times = 1;
+				mockListener.success((Void) any);
+				times = 0;
+				mockListener.failure((Exception) any);
+				times = 1;
 			}
 		};
 		assertThat(client.getConnectingHost(), is(nullValue()));

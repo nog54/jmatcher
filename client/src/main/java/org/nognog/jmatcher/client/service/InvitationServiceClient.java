@@ -67,6 +67,32 @@ public class InvitationServiceClient implements Closeable {
 			}
 		}).start();
 	}
+	
+	/**
+	 * @param key
+	 * @param listener
+	 */
+	public void cancelConnection(final EndListener<Void> listener) {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					final boolean connect = InvitationServiceClient.this.jmatcherConnectionClient.cancelConnection();
+					if (listener != null) {
+						if (connect) {
+							listener.success(null);
+						} else {
+							listener.failure(null);
+						}
+					}
+				} catch (Exception e) {
+					if (listener != null) {
+						listener.failure(e);
+					}
+				}
+			}
+		}).start();
+	}
 
 	/**
 	 * Get the core for making connection
