@@ -15,6 +15,8 @@
 package org.nognog.jmatcher.client.service;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.junit.Assert.assertThat;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,6 +26,9 @@ import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.client.JMatcherConnectionClient;
 import org.nognog.jmatcher.client.JMatcherEntryClient;
 import org.nognog.jmatcher.server.JMatcherDaemon;
+
+import mockit.Mocked;
+import mockit.Verifications;
 
 /**
  * @author goshi 2016/01/26
@@ -94,4 +99,98 @@ public class InvitationServiceClientTest {
 		}
 	}
 
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.service.InvitationServiceClient#connect(int, org.nognog.jmatcher.client.service.EndListener)}
+	 * .
+	 * @param listener 
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testClose(@Mocked EndListener<Void> listener) throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient("Colombia", "localhost")) { //$NON-NLS-1$ //$NON-NLS-2$
+			final int portTellerPort = JMatcher.PORT - 1;
+			entryClient.setPortTellerPort(portTellerPort);
+			final Integer key = entryClient.startInvitation();
+			this.doTestClose(key, portTellerPort, listener);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	/**
+	 * @param key
+	 * @param portTellerPort
+	 * @throws InterruptedException
+	 */
+	private void doTestClose(Integer key, int portTellerPort, EndListener<Void> mockListener) throws InterruptedException {
+		try (JMatcherConnectionClient jmatcherConnectionClient = new JMatcherConnectionClient("Crystal mountain", "localhost")) { //$NON-NLS-1$ //$NON-NLS-2$
+			jmatcherConnectionClient.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final InvitationServiceClient client = new InvitationServiceClient(jmatcherConnectionClient)) {
+				this.testCloseAfterConnect(key, client);
+				this.testCloseWhileConnecting(key, client, mockListener);
+			}
+		}
+	}
+
+	private void testCloseAfterConnect(Integer key, final InvitationServiceClient client) throws InterruptedException {
+		final EndListener<Void> listener = new EndListener<Void>() {
+			@Override
+			public void success(Void result) {
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+
+			@Override
+			public void failure(Exception e) {
+				synchronized (InvitationServiceClientTest.this) {
+					InvitationServiceClientTest.this.notifyAll();
+				}
+			}
+		};
+		client.connect(key, listener);
+		synchronized (this) {
+			this.wait();
+		}
+		assertThat(client.getConnectingHost(), is(not(nullValue())));
+		assertThat(client.getConnectingSocket(), is(not(nullValue())));
+		client.close();
+		assertThat(client.getConnectingHost(), is(nullValue()));
+		assertThat(client.getConnectingSocket(), is(nullValue()));
+	}
+
+	/**
+	 * @param key
+	 * @param client
+	 * @param mockListener
+	 * @throws InterruptedException
+	 */
+	@SuppressWarnings({ "unused", "static-method" })
+	private void testCloseWhileConnecting(Integer key, InvitationServiceClient client, final EndListener<Void> mockListener) throws InterruptedException {
+		client.connect(key, mockListener);
+		new Verifications() {
+			{
+				mockListener.success((Void) any); times = 0;
+				mockListener.failure((Exception) any); times = 0;
+			}
+		};
+		assertThat(client.getConnectingHost(), is(nullValue()));
+		assertThat(client.getConnectingSocket(), is(not(nullValue())));
+		client.close();
+		Thread.sleep(2000);
+		new Verifications() {
+			{
+				mockListener.success((Void) any); times = 0;
+				mockListener.failure((Exception) any); times = 1;
+			}
+		};
+		assertThat(client.getConnectingHost(), is(nullValue()));
+		assertThat(client.getConnectingSocket(), is(nullValue()));
+	}
 }

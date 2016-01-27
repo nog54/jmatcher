@@ -202,32 +202,37 @@ public class JMatcherConnectionClient implements Closeable {
 	 */
 	public boolean connect(int key) throws IOException {
 		try {
-			this.socket = new DatagramSocket();
-			this.setupUDPSocket(this.socket);
-			Host connectionTargetHost = this.getTargetHostFromServer(key);
-			if (connectionTargetHost == null) {
-				this.closeForcibly();
-				return false;
+			final boolean success = this.tryToConnect(key);
+			if (!success) {
+				this.close();
 			}
-			if (SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.equals(connectionTargetHost.getAddress())) {
-				connectionTargetHost = this.findInternalNetworkEntryHost(key);
-				if (connectionTargetHost == null) {
-					this.closeForcibly();
-					return false;
-				}
-			}
-			for (int i = 0; i < this.retryCount; i++) {
-				final boolean success = this.tryToConnectTo(connectionTargetHost);
-				if (success) {
-					return true;
-				}
-			}
-			this.closeForcibly();
-			return false;
+			return success;
 		} catch (IOException e) {
-			this.closeForcibly();
+			this.close();
 			throw e;
 		}
+	}
+
+	private boolean tryToConnect(int key) throws IOException {
+		this.socket = new DatagramSocket();
+		this.setupUDPSocket(this.socket);
+		Host connectionTargetHost = this.getTargetHostFromServer(key);
+		if (connectionTargetHost == null) {
+			return false;
+		}
+		if (SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.equals(connectionTargetHost.getAddress())) {
+			connectionTargetHost = this.findInternalNetworkEntryHost(key);
+			if (connectionTargetHost == null) {
+				return false;
+			}
+		}
+		for (int i = 0; i < this.retryCount; i++) {
+			final boolean success = this.tryToConnectTo(connectionTargetHost);
+			if (success) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private Host getTargetHostFromServer(int key) {
@@ -300,45 +305,40 @@ public class JMatcherConnectionClient implements Closeable {
 
 	@Override
 	public void close() {
-		try {
-			this.cancelConnection();
-		} catch (Exception e) {
-			this.closeForcibly();
-		}
-	}
-	
-	/**
-	 * 
-	 */
-	private void closeForcibly() {
 		JMatcherClientUtil.close(this.socket);
 		this.socket = null;
 		this.connectingHost = null;
 	}
 
 	/**
+	 * Cancel connection. It should be invoked before close. Otherwise, the
+	 * JMatcherEntryClient won't know this has already been closed.
+	 * 
+	 * @return true if succeed in sending cancel request
 	 * @throws IOException
 	 *             thrown if failed to communicate with other
 	 */
-	public void cancelConnection() throws IOException {
+	public boolean cancelConnection() throws IOException {
 		if (this.socket == null) {
-			return;
+			return false;
 		}
-		for (int i = 0; i < this.retryCount; i++) {
-			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
-			try {
-				for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-					if (this.tryToReceiveJMatcherMessageFrom(this.connectingHost).getType() == JMatcherClientMessageType.CANCELLED) {
-						this.closeForcibly(); // successful end
-						return;
+		try {
+			for (int i = 0; i < this.retryCount; i++) {
+				JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
+				try {
+					for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
+						if (this.tryToReceiveJMatcherMessageFrom(this.connectingHost).getType() == JMatcherClientMessageType.CANCELLED) {
+							return true;
+						}
 					}
+				} catch (SocketTimeoutException e) {
+					// one of the end conditions
 				}
-			} catch (SocketTimeoutException e) {
-				// one of the end conditions
 			}
+		} finally {
+			this.close();
 		}
-		this.closeForcibly(); // force end
-		return;
+		return false;
 	}
 
 	/**

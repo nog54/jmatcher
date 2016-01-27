@@ -69,6 +69,15 @@ public class InvitationServiceClient implements Closeable {
 	}
 
 	/**
+	 * Get the core for making connection
+	 * 
+	 * @return the jmatcherConnectionClient
+	 */
+	public JMatcherConnectionClient getJMatcherConnectionClient() {
+		return this.jmatcherConnectionClient;
+	}
+
+	/**
 	 * @return socket
 	 */
 	public DatagramSocket getConnectingSocket() {
