@@ -78,7 +78,7 @@ public abstract class InvitationService implements JMatcherEntryClientObserver, 
 	/**
 	 * Stop current invitation if this is inviting. UDP connection still will be
 	 * alive after this method. If you want to reset all communication, you
-	 * should use {@link #stopCommunication()}} or {@link #close()}
+	 * should use {@link #stopCommunication(EndListener)}} or {@link #close()}
 	 * 
 	 * @param listener
 	 */
@@ -107,9 +107,9 @@ public abstract class InvitationService implements JMatcherEntryClientObserver, 
 
 	/**
 	 * Stop all current communication. The difference between this method and
-	 * {@link #stopInvitation()}} is whether udp connection will be closed or
+	 * {@link #stopInvitation(EndListener)}} is whether udp connection will be closed or
 	 * not. If you want to communicate with other peers and stop invitation, you
-	 * will have to use {@link stopInvitation}}.
+	 * will have to use {@link #stopInvitation(EndListener)}}.
 	 * 
 	 * @param listener
 	 */

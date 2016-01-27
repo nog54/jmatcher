@@ -243,10 +243,6 @@ public class JMatcherConnectionClient implements Closeable {
 		return null;
 	}
 
-	/**
-	 * @param key
-	 * @return
-	 */
 	private Host findInternalNetworkEntryHost(int key) {
 		try {
 			for (final InterfaceAddress networkInterface : NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getInterfaceAddresses()) {
