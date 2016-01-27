@@ -131,4 +131,69 @@ public class JMatcherConnectionClientTest {
 		assertThat(receivedMessage, is(messageFromEntryClient));
 	}
 
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.JMatcherConnectionClient#connect(int)}.
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testConnect() throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestConnect(daemon, JMatcher.PORT - 1);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	/**
+	 * @param daemon
+	 * @param i
+	 * @throws IOException
+	 */
+	private void doTestConnect(JMatcherDaemon daemon, int portTellerPort) throws IOException {
+		final String entryClientName = "Assam"; //$NON-NLS-1$
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
+			entryClient.setPortTellerPort(portTellerPort);
+			final Integer entryKey = entryClient.startInvitation();
+			assertThat(entryKey, is(not(nullValue())));
+			final String wrongJmatcherHost = "fake"; //$NON-NLS-1$
+			final int correctEntryKey = entryKey.intValue();
+			final int wrongEntryKey = (entryKey.intValue() + 1) % daemon.getBoundOfKeyNumber();
+			final int wrongPortTellerPort = portTellerPort - 1;
+			this.doTestConnectWith(wrongEntryKey, wrongJmatcherHost, wrongPortTellerPort, false);
+			this.doTestConnectWith(wrongEntryKey, wrongJmatcherHost, portTellerPort, false);
+			this.doTestConnectWith(wrongEntryKey, jmatcherHost, wrongPortTellerPort, false);
+			this.doTestConnectWith(wrongEntryKey, jmatcherHost, portTellerPort, false);
+			this.doTestConnectWith(correctEntryKey, wrongJmatcherHost, wrongPortTellerPort, false);
+			this.doTestConnectWith(correctEntryKey, wrongJmatcherHost, portTellerPort, false);
+			this.doTestConnectWith(correctEntryKey, jmatcherHost, wrongPortTellerPort, false);
+			this.doTestConnectWith(correctEntryKey, jmatcherHost, portTellerPort, true);
+			entryClient.setMaxSizeOfConnectingHosts(0);
+			this.doTestConnectWith(correctEntryKey, jmatcherHost, portTellerPort, false);
+		}
+	}
+
+	@SuppressWarnings({ "boxing", "static-method" })
+	private void doTestConnectWith(final int entryKey, final String wrongJmatcherHost, int portTellerPort, boolean expected) throws IOException {
+		final String connectionClientName = "Uva"; //$NON-NLS-1$
+		try (JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, wrongJmatcherHost)) {
+			connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
+			if (expected == false) {
+				assertThat(connectionClient.connect(entryKey), is(false));
+				assertThat(connectionClient.getConnectingHost(), is(nullValue()));
+				assertThat(connectionClient.getConnectingSocket(), is(nullValue()));
+			} else {
+				assertThat(connectionClient.connect(entryKey), is(true));
+				assertThat(connectionClient.getConnectingHost(), is(not(nullValue())));
+				assertThat(connectionClient.getConnectingSocket(), is(not(nullValue())));
+			}
+		}
+	}
+
 }

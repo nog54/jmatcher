@@ -268,11 +268,10 @@ public class JMatcherConnectionClient implements Closeable {
 	}
 
 	private boolean tryToConnectTo(final Host connectionTargetHost) throws IOException {
-		final InetSocketAddress connectionTargetHostAddress = new InetSocketAddress(connectionTargetHost.getAddress(), connectionTargetHost.getPort());
 		JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-				final JMatcherClientMessage receivedJMatcherMessage = this.tryToReceiveJMatcherMessageFrom(connectionTargetHostAddress);
+				final JMatcherClientMessage receivedJMatcherMessage = this.tryToReceiveJMatcherMessageFrom(connectionTargetHost);
 				if (receivedJMatcherMessage == null) {
 					continue;
 				}
@@ -295,14 +294,23 @@ public class JMatcherConnectionClient implements Closeable {
 		return false;
 	}
 
-	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(InetSocketAddress hostAddress) throws IOException {
+	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host) throws IOException {
 		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
-		if (JMatcherClientUtil.packetCameFrom(hostAddress, packet) == false) {
+		if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
 			return null;
 		}
 		return JMatcherClientUtil.getJMatcherMessageFrom(packet);
 	}
 
+	@Override
+	public void close() {
+		try {
+			this.cancelConnection();
+		} catch (Exception e) {
+			this.closeForcibly();
+		}
+	}
+	
 	/**
 	 * 
 	 */
@@ -310,15 +318,6 @@ public class JMatcherConnectionClient implements Closeable {
 		JMatcherClientUtil.close(this.socket);
 		this.socket = null;
 		this.connectingHost = null;
-	}
-
-	@Override
-	public void close() {
-		try {
-			this.cancelConnection();
-		} catch (IOException e) {
-			this.closeForcibly();
-		}
 	}
 
 	/**
@@ -329,12 +328,11 @@ public class JMatcherConnectionClient implements Closeable {
 		if (this.socket == null) {
 			return;
 		}
-		final InetSocketAddress hostAddress = new InetSocketAddress(this.connectingHost.getAddress(), this.connectingHost.getPort());
 		for (int i = 0; i < this.retryCount; i++) {
 			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
 			try {
 				for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-					if (this.tryToReceiveJMatcherMessageFrom(hostAddress).getType() == JMatcherClientMessageType.CANCELLED) {
+					if (this.tryToReceiveJMatcherMessageFrom(this.connectingHost).getType() == JMatcherClientMessageType.CANCELLED) {
 						this.closeForcibly(); // successful end
 						return;
 					}
