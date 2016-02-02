@@ -116,19 +116,35 @@ public class JMatcherConnectionClientTest {
 	@SuppressWarnings({ "boxing", "static-method" })
 	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionClient connectionClient, final JMatcherEntryClient entryClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
-		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
-		assertThat(connectionClient.sendMessage(messageFromConnectionClient), is(true));
-		final String receivedMessage = entryClient.receiveMessageFrom(connectionClientHost);
-		assertThat(receivedMessage, is(messageFromConnectionClient));
+		final String messageFromConnectionClient1 = "from connectionClient1"; //$NON-NLS-1$
+		assertThat(connectionClient.sendMessage(messageFromConnectionClient1), is(true));
+		final String failedMessage = entryClient.receiveMessageFrom(new Host(null, 0));
+		assertThat(failedMessage, is(not(messageFromConnectionClient1)));
+		final String successMessage = entryClient.receiveMessageFrom(connectionClientHost);
+		assertThat(successMessage, is(messageFromConnectionClient1));
+
+		final String messageFromConnectionClient2 = "from connectionClient2"; //$NON-NLS-1$
+		assertThat(connectionClient.sendMessage(messageFromConnectionClient2), is(true));
+		final ReceivedMessage receivedMessage = entryClient.receiveMessage();
+		assertThat(receivedMessage.getSender(), is(connectionClientHost));
+		assertThat(receivedMessage.getMessage(), is(messageFromConnectionClient2));
 	}
 
 	@SuppressWarnings({ "boxing", "static-method" })
 	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntryClient entryClient, final JMatcherConnectionClient connectionClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
-		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
-		assertThat(entryClient.sendMessageTo(connectionClientHost, messageFromEntryClient), is(true));
-		final String receivedMessage = connectionClient.receiveMessage();
-		assertThat(receivedMessage, is(messageFromEntryClient));
+		final String messageFromEntryClient1 = "from entryClient1"; //$NON-NLS-1$
+		assertThat(entryClient.sendMessageTo(messageFromEntryClient1, connectionClientHost), is(true));
+		final String failedMessage = connectionClient.receiveMessageFrom(new Host(null, 0));
+		assertThat(failedMessage, is(not(messageFromEntryClient1)));
+		final String successMessage = connectionClient.receiveMessageFrom(connectionClient.getConnectingHost());
+		assertThat(successMessage, is(messageFromEntryClient1));
+
+		final String messageFromEntryClient2 = "from entryClient2"; //$NON-NLS-1$
+		assertThat(entryClient.sendMessageTo(messageFromEntryClient2, connectionClientHost), is(true));
+		final ReceivedMessage receivedMessage = connectionClient.receiveMessage();
+		assertThat(receivedMessage.getSender(), is(connectionClient.getConnectingHost()));
+		assertThat(receivedMessage.getMessage(), is(messageFromEntryClient2));
 	}
 
 	/**

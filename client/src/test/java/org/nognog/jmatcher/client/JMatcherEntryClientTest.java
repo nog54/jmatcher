@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
@@ -234,7 +233,7 @@ public class JMatcherEntryClientTest {
 	private static void removeConnectingHostsForcibly(JMatcherEntryClient entryClient, int removeCountOfClient) {
 		final Set<Host> connectingHosts = Deencapsulation.getField(entryClient, "connectingHosts"); //$NON-NLS-1$
 		final Map<Host, InetSocketAddress> socketAddressCache = Deencapsulation.getField(entryClient, "socketAddressCache"); //$NON-NLS-1$
-		final Map<Host, BlockingQueue<String>> receivedMessages = Deencapsulation.getField(entryClient, "receivedMessages"); //$NON-NLS-1$
+		final ReceivedMessageBuffer receivedMessageBuffer = Deencapsulation.getField(entryClient, "receivedMessageBuffer"); //$NON-NLS-1$
 		int count = 0;
 		for (Host host : entryClient.getConnectingHosts()) {
 			if (count++ >= removeCountOfClient) {
@@ -242,7 +241,7 @@ public class JMatcherEntryClientTest {
 			}
 			connectingHosts.remove(host);
 			socketAddressCache.remove(host);
-			receivedMessages.remove(host);
+			receivedMessageBuffer.clear(host);
 		}
 	}
 

@@ -1,4 +1,4 @@
-/** Copyright 2015 Goshi Noguchi (noggon54@gmail.com)
+/** Copyright 2016 Goshi Noguchi (noggon54@gmail.com)
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -14,36 +14,30 @@
 
 package org.nognog.jmatcher.client;
 
+import java.io.Closeable;
+
 import org.nognog.jmatcher.Host;
 
 /**
- * @author goshi 2015/12/29
+ * @author goshi 2016/01/29
  */
-public class ReceivedMessage {
-	private final Host sender;
-	private final String message;
+public interface Peer extends Closeable {
 
 	/**
-	 * @param sender 
-	 * @param message 
-	 * 
+	 * @return received message
 	 */
-	public ReceivedMessage(Host sender, String message) {
-		this.sender = sender;
-		this.message = message;
-	}
+	ReceivedMessage receiveMessage();
 
 	/**
-	 * @return the sender
+	 * @param host
+	 * @return message from the argument
 	 */
-	public Host getSender() {
-		return this.sender;
-	}
+	String receiveMessageFrom(Host host);
 
 	/**
-	 * @return the body
+	 * @param message
+	 * @param hosts
+	 * @return true if succeed in sending
 	 */
-	public String getMessage() {
-		return this.message;
-	}
+	Host[] sendMessageTo(String message, Host... hosts);
 }

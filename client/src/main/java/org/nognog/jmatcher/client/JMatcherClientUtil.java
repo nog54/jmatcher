@@ -42,7 +42,7 @@ public class JMatcherClientUtil {
 	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, Host host) throws IOException {
 		sendJMatcherClientMessage(datagramSocket, type, senderName, new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
-	
+
 	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, InetSocketAddress address) throws IOException {
 		sendUDPPacket(datagramSocket, JMatcherClientMessage.serialize(new JMatcherClientMessage(type, senderName)), address);
 	}
@@ -82,6 +82,9 @@ public class JMatcherClientUtil {
 	}
 
 	static JMatcherClientMessage getJMatcherMessageFrom(DatagramPacket packet) {
+		if (packet == null) {
+			return null;
+		}
 		try {
 			return JMatcherClientMessage.deserialize(getMessageFrom(packet));
 		} catch (IllegalArgumentException e) {

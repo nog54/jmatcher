@@ -86,8 +86,9 @@ public class ProductEnvironmentTest {
 	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntryClient entryClient, final JMatcherConnectionClient connectionClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
-		assertThat(entryClient.sendMessageTo(connectionClientHost, messageFromEntryClient), is(true));
-		final String receivedMessage = connectionClient.receiveMessage();
-		assertThat(receivedMessage, is(messageFromEntryClient));
+		assertThat(entryClient.sendMessageTo(messageFromEntryClient, connectionClientHost), is(true));
+		final ReceivedMessage receivedMessage = connectionClient.receiveMessage();
+		assertThat(receivedMessage.getSender(), is(connectionClient.getConnectingHost()));
+		assertThat(receivedMessage.getMessage(), is(messageFromEntryClient));
 	}
 }

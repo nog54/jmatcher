@@ -14,7 +14,6 @@
 
 package org.nognog.jmatcher.client;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -25,15 +24,13 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
@@ -50,7 +47,7 @@ import org.nognog.jmatcher.udp.request.EnableEntryRequest;
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherEntryClient implements Closeable {
+public class JMatcherEntryClient implements Peer {
 
 	private String name;
 
@@ -69,13 +66,13 @@ public class JMatcherEntryClient implements Closeable {
 	private DatagramSocket udpSocket;
 	private int udpReceiveBuffSize = defaultBuffSize;
 
+	private ReceivedMessageBuffer receivedMessageBuffer;
+
 	// these sets are designed to be
 	// requestingHosts ∩ connectingHosts = Φ.
 	private CopyOnWriteArraySet<Host> requestingHosts;
 	private Set<Host> connectingHosts;
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
-
-	private Map<Host, BlockingQueue<String>> receivedMessages;
 
 	private Set<JMatcherEntryClientObserver> observers;
 
@@ -108,8 +105,8 @@ public class JMatcherEntryClient implements Closeable {
 		this.requestingHosts = new CopyOnWriteArraySet<>();
 		this.connectingHosts = new HashSet<>();
 		this.socketAddressCache = new ConcurrentHashMap<>();
-		this.receivedMessages = new HashMap<>();
 		this.observers = new HashSet<>();
+		this.receivedMessageBuffer = new ReceivedMessageBuffer();
 	}
 
 	/**
@@ -369,7 +366,7 @@ public class JMatcherEntryClient implements Closeable {
 		final int prevSizeOfConnectingHosts = this.connectingHosts.size();
 		this.connectingHosts.clear();
 		this.socketAddressCache.clear();
-		this.receivedMessages.clear();
+		this.receivedMessageBuffer.clear();
 		if (prevSizeOfConnectingHosts != 0) {
 			this.notifyObservers(UpdateEvent.CLEAR, null);
 		}
@@ -553,7 +550,9 @@ public class JMatcherEntryClient implements Closeable {
 		final JMatcherClientMessage jmatcherClientMessage = JMatcherClientUtil.getJMatcherMessageFrom(packet);
 		// in case JmatcherClientMessage isn't sent
 		if (jmatcherClientMessage == null) {
-			this.storeMessageIfFromConnectingHost(packet, from);
+			if (this.connectingHosts.contains(from)) {
+				this.storeMessage(packet, from);
+			}
 			return;
 		}
 		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.CANCEL) {
@@ -570,7 +569,7 @@ public class JMatcherEntryClient implements Closeable {
 		this.requestingHosts.remove(from);
 		this.socketAddressCache.remove(from);
 		if (this.connectingHosts.remove(from)) {
-			this.receivedMessages.remove(from);
+			this.receivedMessageBuffer.clear(from);
 			this.notifyObservers(UpdateEvent.REMOVE, from);
 		}
 		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
@@ -585,22 +584,14 @@ public class JMatcherEntryClient implements Closeable {
 			from.setName(jmatcherClientMessage.getSenderName());
 			this.requestingHosts.remove(from);
 			this.notifyObservers(UpdateEvent.ADD, from);
-			this.receivedMessages.put(from, new LinkedBlockingQueue<String>());
 		}
 		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
 	}
 
-	private void storeMessageIfFromConnectingHost(final DatagramPacket packet, final Host from) {
-		if (this.connectingHosts.contains(from)) {
-			final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
-			if (receivedMessage != null) {
-				final boolean added = this.receivedMessages.get(from).offer(receivedMessage);
-				if (added) {
-					synchronized (from) {
-						from.notifyAll();
-					}
-				}
-			}
+	private void storeMessage(final DatagramPacket packet, final Host from) {
+		final String message = JMatcherClientUtil.getMessageFrom(packet);
+		if (message != null) {
+			this.receivedMessageBuffer.store(from, message);
 		}
 	}
 
@@ -634,35 +625,50 @@ public class JMatcherEntryClient implements Closeable {
 		return null;
 	}
 
-	/**
-	 * Receive message from argument host. The argument host have to be
-	 * contained in a set which is obtained by {@link #getConnectingHosts()}
-	 * 
-	 * @param host
-	 * @return message from host
-	 */
-	public String receiveMessageFrom(Host host) {
-		final String alreadyReceivedMessage = this.receivedMessages.get(host).poll();
-		if (alreadyReceivedMessage != null || this.udpSocket == null) {
-			return alreadyReceivedMessage;
+	@Override
+	public ReceivedMessage receiveMessage() {
+		try {
+			return this.receivedMessageBuffer.poll(this.udpSocket.getSoTimeout());
+		} catch (SocketException e) {
+			return null;
 		}
+	}
 
-		synchronized (host) {
-			try {
-				host.wait(this.udpSocket.getSoTimeout());
-			} catch (SocketException | InterruptedException e) {
+	@Override
+	public String receiveMessageFrom(Host host) {
+		try {
+			final ReceivedMessage receivedMessage = this.receivedMessageBuffer.poll(host, this.udpSocket.getSoTimeout());
+			if (receivedMessage == null) {
 				return null;
 			}
+			return receivedMessage.getMessage();
+		} catch (SocketException e) {
+			return null;
 		}
-		return this.receivedMessages.get(host).poll();
 	}
 
 	/**
-	 * @param host
 	 * @param message
+	 * @param host
 	 * @return true if succeed in sending
 	 */
-	public boolean sendMessageTo(Host host, String message) {
+	@Override
+	public Host[] sendMessageTo(String message, Host... hosts) {
+		final List<Host> successHost = new ArrayList<>();
+		for (Host host : hosts) {
+			if (sendMessageTo(message, host)) {
+				successHost.add(host);
+			}
+		}
+		return successHost.toArray(new Host[0]);
+	}
+
+	/**
+	 * @param message
+	 * @param host
+	 * @return true if succeed in sending
+	 */
+	public boolean sendMessageTo(String message, Host host) {
 		if (!this.connectingHosts.contains(host)) {
 			return false;
 		}

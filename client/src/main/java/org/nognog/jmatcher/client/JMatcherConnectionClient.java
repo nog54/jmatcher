@@ -14,7 +14,6 @@
 
 package org.nognog.jmatcher.client;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -34,7 +33,7 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
 /**
  * @author goshi 2015/11/27
  */
-public class JMatcherConnectionClient implements Closeable {
+public class JMatcherConnectionClient implements Peer {
 
 	private String name;
 
@@ -296,11 +295,16 @@ public class JMatcherConnectionClient implements Closeable {
 	}
 
 	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host) throws IOException {
+		final DatagramPacket packet = tryToReceiveDatagramPacketFrom(host);
+		return JMatcherClientUtil.getJMatcherMessageFrom(packet);
+	}
+
+	private DatagramPacket tryToReceiveDatagramPacketFrom(Host host) throws SocketTimeoutException, IOException {
 		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
 		if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
 			return null;
 		}
-		return JMatcherClientUtil.getJMatcherMessageFrom(packet);
+		return packet;
 	}
 
 	@Override
@@ -327,7 +331,8 @@ public class JMatcherConnectionClient implements Closeable {
 				JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
 				try {
 					for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-						if (this.tryToReceiveJMatcherMessageFrom(this.connectingHost).getType() == JMatcherClientMessageType.CANCELLED) {
+						final JMatcherClientMessage receivedMessage = this.tryToReceiveJMatcherMessageFrom(this.connectingHost);
+						if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
 							return true;
 						}
 					}
@@ -339,6 +344,20 @@ public class JMatcherConnectionClient implements Closeable {
 			this.close();
 		}
 		return false;
+	}
+
+	@Override
+	public Host[] sendMessageTo(String message, Host... hosts) {
+		if (hosts.length != 1 || hosts[0].equals(this.connectingHost) == false) {
+			return new Host[0];
+		}
+		final boolean success = this.sendMessage(message);
+		if (success) {
+			final Host[] result = new Host[1];
+			result[0] = hosts[0];
+			return result;
+		}
+		return new Host[0];
 	}
 
 	/**
@@ -361,15 +380,20 @@ public class JMatcherConnectionClient implements Closeable {
 	/**
 	 * @return message from connectingHost
 	 */
-	public String receiveMessage() {
+	@Override
+	public ReceivedMessage receiveMessage() {
 		if (this.socket == null || this.connectingHost == null || this.socket.isClosed()) {
 			return null;
 		}
 		try {
 			for (int i = 0; i < this.retryCount; i++) {
-				final String receiveMessage = JMatcherClientUtil.receiveMessage(this.socket, this.receiveBuffSize);
-				if (isNotJMatcherClientMessage(receiveMessage)) {
-					return receiveMessage;
+				final DatagramPacket packet = this.tryToReceiveDatagramPacketFrom(this.connectingHost);
+				if (packet == null) {
+					continue;
+				}
+				final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
+				if (isNotJMatcherClientMessage(receivedMessage)) {
+					return new ReceivedMessage(this.connectingHost, receivedMessage);
 				}
 			}
 			System.err.println("JMatcherConnectionClient : abnormal state"); //$NON-NLS-1$
@@ -381,5 +405,13 @@ public class JMatcherConnectionClient implements Closeable {
 
 	private static boolean isNotJMatcherClientMessage(final String receiveMessage) {
 		return JMatcherClientMessage.deserialize(receiveMessage) == null;
+	}
+
+	@Override
+	public String receiveMessageFrom(Host host) {
+		if (!host.equals(this.connectingHost)) {
+			return null;
+		}
+		return this.receiveMessage().getMessage();
 	}
 }
