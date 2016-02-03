@@ -31,6 +31,9 @@ import org.nognog.jmatcher.udp.request.ConnectionRequest;
 import org.nognog.jmatcher.udp.response.ConnectionResponse;
 
 /**
+ * This is a class to communicate with a JMatcherEntryClient. This class is not
+ * thread-safe.
+ * 
  * @author goshi 2015/11/27
  */
 public class JMatcherConnectionClient implements Peer {
@@ -200,6 +203,9 @@ public class JMatcherConnectionClient implements Peer {
 	 *             thrown if failed to communicate with other
 	 */
 	public boolean connect(int key) throws IOException {
+		if (this.socket != null || this.connectingHost != null) {
+			return false;
+		}
 		try {
 			final boolean success = this.tryToConnect(key);
 			if (!success) {
@@ -339,7 +345,7 @@ public class JMatcherConnectionClient implements Peer {
 	 *             thrown if failed to communicate with other
 	 */
 	public boolean cancelConnection() throws IOException {
-		if (this.socket == null) {
+		if (this.socket == null || this.connectingHost == null) {
 			return false;
 		}
 		try {

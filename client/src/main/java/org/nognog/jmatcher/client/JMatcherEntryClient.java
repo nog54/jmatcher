@@ -43,7 +43,8 @@ import org.nognog.jmatcher.tcp.response.TCPResponse;
 import org.nognog.jmatcher.udp.request.EnableEntryRequest;
 
 /**
- * Entry Client of JMatcher class.
+ * This is a class to communicate with JMatcherConnectionClients. This class is
+ * not thread-safe.
  * 
  * @author goshi 2015/11/27
  */
@@ -286,7 +287,7 @@ public class JMatcherEntryClient implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public synchronized Integer startInvitation() throws IOException {
+	public Integer startInvitation() throws IOException {
 		if (this.isCommunicating()) {
 			return null;
 		}

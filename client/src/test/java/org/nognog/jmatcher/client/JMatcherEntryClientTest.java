@@ -326,6 +326,10 @@ public class JMatcherEntryClientTest {
 				key = entryClient.startInvitation();
 				this.verifyCountOfNotificationOfObserver(observer, 4);
 				connectionClient.connect(key);
+				this.verifyCountOfNotificationOfObserver(observer, 4);
+				connectionClient.cancelConnection();
+				this.verifyCountOfNotificationOfObserver(observer, 4);
+				connectionClient.connect(key);
 				this.verifyCountOfNotificationOfObserver(observer, 5);
 			}
 		}
