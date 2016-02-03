@@ -203,11 +203,11 @@ public class JMatcherConnectionClient implements Peer {
 		try {
 			final boolean success = this.tryToConnect(key);
 			if (!success) {
-				this.close();
+				this.closeWithoutNotificationToConnectingHost();
 			}
 			return success;
 		} catch (IOException e) {
-			this.close();
+			this.closeWithoutNotificationToConnectingHost();
 			throw e;
 		}
 	}
@@ -308,17 +308,33 @@ public class JMatcherConnectionClient implements Peer {
 	}
 
 	@Override
-	public void close() {
+	public void close() throws IOException {
+		this.cancelConnection();
+	}
+
+	/**
+	 * Close it without notification to the connecting host. We should generally
+	 * use {@link #close()} or {@link #cancelConnection()} instead of this
+	 * method
+	 */
+	public void closeWithoutNotificationToConnectingHost() {
 		JMatcherClientUtil.close(this.socket);
 		this.socket = null;
 		this.connectingHost = null;
 	}
 
 	/**
-	 * Cancel connection. It should be invoked before close. Otherwise, the
-	 * JMatcherEntryClient won't know this has already been closed.
+	 * Cancel connection. We should invoke this method instead of
+	 * {@link #close()} if we want to notify the connecting host that it will be
+	 * closed. Otherwise, the JMatcherEntryClient won't know this has already
+	 * been closed.
+	 * <p>
+	 * <b> Note: Whether it returns true or not, this object will have closed
+	 * after this method. </b>
+	 * </p>
 	 * 
-	 * @return true if succeed in sending cancel request
+	 * 
+	 * @return true if succeed in cancellation
 	 * @throws IOException
 	 *             thrown if failed to communicate with other
 	 */
@@ -341,7 +357,7 @@ public class JMatcherConnectionClient implements Peer {
 				}
 			}
 		} finally {
-			this.close();
+			this.closeWithoutNotificationToConnectingHost();
 		}
 		return false;
 	}

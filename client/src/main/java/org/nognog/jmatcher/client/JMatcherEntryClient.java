@@ -649,7 +649,7 @@ public class JMatcherEntryClient implements Peer {
 
 	/**
 	 * @param message
-	 * @param host
+	 * @param hosts
 	 * @return true if succeed in sending
 	 */
 	@Override
