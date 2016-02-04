@@ -38,7 +38,8 @@ public class JMatcherClientMessage {
 	 */
 	public JMatcherClientMessage(JMatcherClientMessageType type, String senderName) {
 		if (!regardsAsValidName(senderName)) {
-			throw new IllegalArgumentException("senderName is too long"); //$NON-NLS-1$
+			final String message = new StringBuilder().append("senderName is too long : ").append(senderName).toString(); //$NON-NLS-1$
+			throw new IllegalArgumentException(message);
 		}
 		this.type = type;
 		this.senderName = senderName;

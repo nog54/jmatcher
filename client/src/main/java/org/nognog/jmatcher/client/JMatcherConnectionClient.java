@@ -72,7 +72,7 @@ public class JMatcherConnectionClient implements Peer {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public JMatcherConnectionClient(String name, String host, int port) {
-		this.setName(name);
+		this.setNameIfNotConnecting(name);
 		this.jmatcherServer = host;
 		this.jmatcherServerPort = port;
 	}
@@ -88,11 +88,22 @@ public class JMatcherConnectionClient implements Peer {
 	 * @param name
 	 *            the name to set
 	 */
-	public void setName(String name) {
+	public void setNameIfNotConnecting(String name) {
+		if (this.isConnecting()) {
+			return;
+		}
 		if (!JMatcherClientMessage.regardsAsValidName(name)) {
-			throw new IllegalArgumentException("too long name"); //$NON-NLS-1$
+			final String message = new StringBuilder().append("senderName is too long : ").append(name).toString(); //$NON-NLS-1$
+			throw new IllegalArgumentException(message);
 		}
 		this.name = name;
+	}
+
+	/**
+	 * @return true if it is connecting
+	 */
+	public boolean isConnecting() {
+		return this.connectingHost != null;
 	}
 
 	/**

@@ -100,7 +100,8 @@ public class JMatcherEntryClient implements Peer {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public JMatcherEntryClient(String name, String jmatcherServer, int port) {
-		this.setName(name);
+		// it contains validation of the name
+		this.setNameIfNotCommunicating(name);
 		this.jmatcherServer = jmatcherServer;
 		this.jmatcherServerPort = port;
 		this.requestingHosts = new CopyOnWriteArraySet<>();
@@ -120,12 +121,18 @@ public class JMatcherEntryClient implements Peer {
 	/**
 	 * @param name
 	 *            the name to set
+	 * @return true if new name is set
 	 */
-	public void setName(String name) {
+	public boolean setNameIfNotCommunicating(String name) {
+		if (this.isCommunicating()) {
+			return false;
+		}
 		if (!JMatcherClientMessage.regardsAsValidName(name)) {
-			throw new IllegalArgumentException("too long name"); //$NON-NLS-1$
+			final String message = new StringBuilder().append("senderName is too long : ").append(name).toString(); //$NON-NLS-1$
+			throw new IllegalArgumentException(message);
 		}
 		this.name = name;
+		return true;
 	}
 
 	/**
@@ -227,13 +234,6 @@ public class JMatcherEntryClient implements Peer {
 	 */
 	public int getUDPReceiveBuffSize() {
 		return this.udpReceiveBuffSize;
-	}
-
-	protected Integer getCurrentEntryKey() {
-		if (this.isInviting()) {
-			return this.lastEntryKey;
-		}
-		return null;
 	}
 
 	/**
@@ -438,10 +438,10 @@ public class JMatcherEntryClient implements Peer {
 	protected void performTellerLoop(final DatagramSocket portTellerSocket) {
 		while (JMatcherEntryClient.this.isInviting()) {
 			try {
-				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(portTellerSocket, JMatcherEntryClient.this.getUDPReceiveBuffSize());
+				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(portTellerSocket, this.udpReceiveBuffSize);
 				final String message = JMatcherClientUtil.getMessageFrom(packet);
 				final Integer sentKey = Integer.valueOf(message);
-				final Integer currentEntryKey = JMatcherEntryClient.this.getCurrentEntryKey();
+				final Integer currentEntryKey = this.getCurrentEntryKey();
 				if (sentKey.equals(currentEntryKey)) {
 					final Host senderHost = new Host(packet.getAddress().getHostAddress(), packet.getPort());
 					final InetSocketAddress senderSocketAddress = new InetSocketAddress(senderHost.getAddress(), senderHost.getPort());
@@ -455,6 +455,13 @@ public class JMatcherEntryClient implements Peer {
 				break;
 			}
 		}
+	}
+
+	protected Integer getCurrentEntryKey() {
+		if (this.isInviting()) {
+			return this.lastEntryKey;
+		}
+		return null;
 	}
 
 	private void startCommunicationThread() {
