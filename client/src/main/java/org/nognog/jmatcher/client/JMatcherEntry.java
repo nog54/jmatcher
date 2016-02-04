@@ -48,7 +48,7 @@ import org.nognog.jmatcher.udp.request.EnableEntryRequest;
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherEntryClient implements Peer {
+public class JMatcherEntry implements Peer {
 
 	private String name;
 
@@ -75,7 +75,7 @@ public class JMatcherEntryClient implements Peer {
 	private Set<Host> connectingHosts;
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
 
-	private Set<JMatcherEntryClientObserver> observers;
+	private Set<JMatcherEntryObserver> observers;
 
 	static final int defalutRetryCount = 2;
 	static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
@@ -88,7 +88,7 @@ public class JMatcherEntryClient implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherEntryClient(String name, String jmatcherServer) {
+	public JMatcherEntry(String name, String jmatcherServer) {
 		this(name, jmatcherServer, JMatcher.PORT);
 	}
 
@@ -99,7 +99,7 @@ public class JMatcherEntryClient implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherEntryClient(String name, String jmatcherServer, int port) {
+	public JMatcherEntry(String name, String jmatcherServer, int port) {
 		// it contains validation of the name
 		this.setNameIfNotCommunicating(name);
 		this.jmatcherServer = jmatcherServer;
@@ -264,19 +264,19 @@ public class JMatcherEntryClient implements Peer {
 	/**
 	 * @param observer
 	 */
-	public void addObserver(JMatcherEntryClientObserver observer) {
+	public void addObserver(JMatcherEntryObserver observer) {
 		this.observers.add(observer);
 	}
 
 	/**
 	 * @param observer
 	 */
-	public void removeObserver(JMatcherEntryClientObserver observer) {
+	public void removeObserver(JMatcherEntryObserver observer) {
 		this.observers.remove(observer);
 	}
 
 	private void notifyObservers(UpdateEvent event, Host target) {
-		for (JMatcherEntryClientObserver observer : this.observers) {
+		for (JMatcherEntryObserver observer : this.observers) {
 			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts), event, target);
 		}
 	}
@@ -421,10 +421,10 @@ public class JMatcherEntryClient implements Peer {
 				@Override
 				public void run() {
 					try {
-						JMatcherEntryClient.this.performTellerLoop(portTellerSocket);
+						JMatcherEntry.this.performTellerLoop(portTellerSocket);
 					} finally {
 						portTellerSocket.close();
-						JMatcherEntryClient.this.portTellerThread = null;
+						JMatcherEntry.this.portTellerThread = null;
 					}
 				}
 			});
@@ -436,7 +436,7 @@ public class JMatcherEntryClient implements Peer {
 	}
 
 	protected void performTellerLoop(final DatagramSocket portTellerSocket) {
-		while (JMatcherEntryClient.this.isInviting()) {
+		while (this.isInviting()) {
 			try {
 				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(portTellerSocket, this.udpReceiveBuffSize);
 				final String message = JMatcherClientUtil.getMessageFrom(packet);
@@ -445,7 +445,7 @@ public class JMatcherEntryClient implements Peer {
 				if (sentKey.equals(currentEntryKey)) {
 					final Host senderHost = new Host(packet.getAddress().getHostAddress(), packet.getPort());
 					final InetSocketAddress senderSocketAddress = new InetSocketAddress(senderHost.getAddress(), senderHost.getPort());
-					JMatcherClientUtil.sendMessage(portTellerSocket, String.valueOf(JMatcherEntryClient.this.getUDPSocket().getLocalPort()), senderHost);
+					JMatcherClientUtil.sendMessage(portTellerSocket, String.valueOf(this.getUDPSocket().getLocalPort()), senderHost);
 					this.requestingHosts.add(senderHost);
 					this.socketAddressCache.put(senderHost, senderSocketAddress);
 				}
@@ -469,9 +469,9 @@ public class JMatcherEntryClient implements Peer {
 			@Override
 			public void run() {
 				try {
-					JMatcherEntryClient.this.performCommunicationLoop();
+					JMatcherEntry.this.performCommunicationLoop();
 				} finally {
-					JMatcherEntryClient.this.communicationThread = null;
+					JMatcherEntry.this.communicationThread = null;
 				}
 			}
 		});

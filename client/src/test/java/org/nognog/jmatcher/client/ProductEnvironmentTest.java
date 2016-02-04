@@ -35,10 +35,10 @@ public class ProductEnvironmentTest {
 		final String jmatcherHost = "nog-jserver1.servehttp.com"; //$NON-NLS-1$
 		final String entryClientName = "Darjeeling"; //$NON-NLS-1$
 		final String connectionClientName = "EarlGrey"; //$NON-NLS-1$
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
+		try (final JMatcherEntry entryClient = new JMatcherEntry(entryClientName, jmatcherHost)) {
 			final Integer entryKey = entryClient.startInvitation();
 			System.out.println("Product Environment test : invite with " + entryKey); //$NON-NLS-1$
-			try (final JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost)) {
+			try (final JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(connectionClientName, jmatcherHost)) {
 				assertThat(connectionClient.connect(entryKey), is(true));
 				assertThat(entryClient.getConnectingHosts().size(), is(1));
 				assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
@@ -74,7 +74,7 @@ public class ProductEnvironmentTest {
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionClient connectionClient, final JMatcherEntryClient entryClient) {
+	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionRequester connectionClient, final JMatcherEntry entryClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
 		assertThat(connectionClient.sendMessage(messageFromConnectionClient), is(true));
@@ -83,7 +83,7 @@ public class ProductEnvironmentTest {
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntryClient entryClient, final JMatcherConnectionClient connectionClient) {
+	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntry entryClient, final JMatcherConnectionRequester connectionClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
 		assertThat(entryClient.sendMessageTo(messageFromEntryClient, connectionClientHost), is(true));

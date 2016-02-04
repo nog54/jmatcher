@@ -30,7 +30,7 @@ import org.nognog.jmatcher.server.JMatcherDaemon;
 /**
  * @author goshi 2015/12/29
  */
-public class JMatcherConnectionClientTest {
+public class JMatcherConnectionRequesterTest {
 
 	/**
 	 * Test method for
@@ -73,11 +73,11 @@ public class JMatcherConnectionClientTest {
 	@SuppressWarnings({ "boxing" })
 	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon, String entryClientName, String connectionClientName, int portTellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
+		try (final JMatcherEntry entryClient = new JMatcherEntry(entryClientName, jmatcherHost)) {
 			entryClient.setPortTellerPort(portTellerPort);
 			final Integer entryKey = entryClient.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
-			try (JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, jmatcherHost)) {
+			try (JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(connectionClientName, jmatcherHost)) {
 				connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
 				assertThat(connectionClient.connect(entryKey), is(true));
 				assertThat(entryClient.getConnectingHosts().size(), is(1));
@@ -114,7 +114,7 @@ public class JMatcherConnectionClientTest {
 	}
 
 	@SuppressWarnings({ "boxing", "static-method" })
-	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionClient connectionClient, final JMatcherEntryClient entryClient) {
+	private void testSendMessageFromConnectionClientToEntryClient(final JMatcherConnectionRequester connectionClient, final JMatcherEntry entryClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromConnectionClient1 = "from connectionClient1"; //$NON-NLS-1$
 		assertThat(connectionClient.sendMessage(messageFromConnectionClient1), is(true));
@@ -131,7 +131,7 @@ public class JMatcherConnectionClientTest {
 	}
 
 	@SuppressWarnings({ "boxing", "static-method" })
-	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntryClient entryClient, final JMatcherConnectionClient connectionClient) {
+	private void testSendMessageFromEntryClientToConnectionClient(final JMatcherEntry entryClient, final JMatcherConnectionRequester connectionClient) {
 		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
 		final String messageFromEntryClient1 = "from entryClient1"; //$NON-NLS-1$
 		assertThat(entryClient.sendMessageTo(messageFromEntryClient1, connectionClientHost), is(true));
@@ -174,7 +174,7 @@ public class JMatcherConnectionClientTest {
 	private void doTestConnect(JMatcherDaemon daemon, int portTellerPort) throws IOException {
 		final String entryClientName = "Assam"; //$NON-NLS-1$
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(entryClientName, jmatcherHost)) {
+		try (final JMatcherEntry entryClient = new JMatcherEntry(entryClientName, jmatcherHost)) {
 			entryClient.setPortTellerPort(portTellerPort);
 			final Integer entryKey = entryClient.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
@@ -198,7 +198,7 @@ public class JMatcherConnectionClientTest {
 	@SuppressWarnings({ "boxing", "static-method" })
 	private void doTestConnectWith(final int entryKey, final String wrongJmatcherHost, int portTellerPort, boolean expected) throws IOException {
 		final String connectionClientName = "Uva"; //$NON-NLS-1$
-		try (JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(connectionClientName, wrongJmatcherHost)) {
+		try (JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(connectionClientName, wrongJmatcherHost)) {
 			connectionClient.setInternalNetworkPortTellerPort(portTellerPort);
 			if (expected == false) {
 				assertThat(connectionClient.connect(entryKey), is(false));

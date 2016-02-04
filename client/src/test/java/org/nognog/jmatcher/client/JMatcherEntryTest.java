@@ -39,7 +39,7 @@ import mockit.Verifications;
  * @author goshi 2015/12/28
  */
 @SuppressWarnings({ "static-method", "boxing" })
-public class JMatcherEntryClientTest {
+public class JMatcherEntryTest {
 
 	/**
 	 * Test method for
@@ -68,13 +68,13 @@ public class JMatcherEntryClientTest {
 	private void doStartInvitation(JMatcherDaemon daemon, int portTellerPort) throws IOException, InterruptedException {
 		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
 		final int wrongPort = 80;
-		try (final JMatcherEntryClient entryClient = new JMatcherEntryClient(null, wrongJmatcherHost, wrongPort)) {
+		try (final JMatcherEntry entryClient = new JMatcherEntry(null, wrongJmatcherHost, wrongPort)) {
 			entryClient.setPortTellerPort(portTellerPort);
 			assertThat(entryClient.getJmatcherServer(), is(wrongJmatcherHost));
 			assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
 			assertThat(entryClient.getConnectingHosts().size(), is(0));
 			assertThat(entryClient.getJMatcherServerPort(), is(wrongPort));
-			assertThat(entryClient.getRetryCount(), is(JMatcherEntryClient.defalutRetryCount));
+			assertThat(entryClient.getRetryCount(), is(JMatcherEntry.defalutRetryCount));
 			// ---- Test with wrong configuration ----
 			try {
 				entryClient.startInvitation();
@@ -171,7 +171,7 @@ public class JMatcherEntryClientTest {
 	}
 
 	private void testInvitationWithFixedMaxSizeOfConnectingHosts(JMatcherDaemon daemon, final String jmatcherHost, int portTellerPort) throws IOException {
-		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
+		try (JMatcherEntry entryClient = new JMatcherEntry(null, jmatcherHost)) {
 			entryClient.setPortTellerPort(portTellerPort);
 			final Integer entryKey = entryClient.startInvitation();
 			final int numberOfParallelConnectionClient = 10;
@@ -195,7 +195,7 @@ public class JMatcherEntryClientTest {
 	}
 
 	private void testInvitationWithUnfixedMaxSizeOfConnectingHosts(final String jmatcherHost, int portTellerPort) throws IOException {
-		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
+		try (JMatcherEntry entryClient = new JMatcherEntry(null, jmatcherHost)) {
 			entryClient.setPortTellerPort(portTellerPort);
 			final int numberOfParallelConnectionClient = 20;
 			final int maxSizeOfConnectingHosts1 = 15;
@@ -230,7 +230,7 @@ public class JMatcherEntryClientTest {
 	 * @param entryClient
 	 * @param removeCountOfClient
 	 */
-	private static void removeConnectingHostsForcibly(JMatcherEntryClient entryClient, int removeCountOfClient) {
+	private static void removeConnectingHostsForcibly(JMatcherEntry entryClient, int removeCountOfClient) {
 		final Set<Host> connectingHosts = Deencapsulation.getField(entryClient, "connectingHosts"); //$NON-NLS-1$
 		final Map<Host, InetSocketAddress> socketAddressCache = Deencapsulation.getField(entryClient, "socketAddressCache"); //$NON-NLS-1$
 		final ReceivedMessageBuffer receivedMessageBuffer = Deencapsulation.getField(entryClient, "receivedMessageBuffer"); //$NON-NLS-1$
@@ -253,7 +253,7 @@ public class JMatcherEntryClientTest {
 				@SuppressWarnings("resource")
 				@Override
 				public void run() {
-					final JMatcherConnectionClient parallelConnectionClient = new JMatcherConnectionClient(null, jmatcherHost);
+					final JMatcherConnectionRequester parallelConnectionClient = new JMatcherConnectionRequester(null, jmatcherHost);
 					parallelConnectionClient.setInternalNetworkPortTellerPort(portTellerPort);
 					try {
 						assertThat(parallelConnectionClient.connect(entryKey), is(true));
@@ -284,7 +284,7 @@ public class JMatcherEntryClientTest {
 	 * @throws Exception
 	 */
 	@Test
-	public final void testNotifyObservers(@Mocked JMatcherEntryClientObserver observer) throws Exception {
+	public final void testNotifyObservers(@Mocked JMatcherEntryObserver observer) throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
@@ -300,13 +300,13 @@ public class JMatcherEntryClientTest {
 	 * @param daemon
 	 * @throws IOException
 	 */
-	private void doTestObservers(JMatcherDaemon daemon, final JMatcherEntryClientObserver observer, int tellerPort) throws Exception {
+	private void doTestObservers(JMatcherDaemon daemon, final JMatcherEntryObserver observer, int tellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (JMatcherEntryClient entryClient = new JMatcherEntryClient(null, jmatcherHost)) {
+		try (JMatcherEntry entryClient = new JMatcherEntry(null, jmatcherHost)) {
 			entryClient.setPortTellerPort(tellerPort);
 			Integer key = entryClient.startInvitation();
 			assertThat(key, is(not(nullValue())));
-			try (JMatcherConnectionClient connectionClient = new JMatcherConnectionClient(null, jmatcherHost)) {
+			try (JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(null, jmatcherHost)) {
 				connectionClient.setInternalNetworkPortTellerPort(tellerPort);
 				connectionClient.connect(key);
 				this.verifyCountOfNotificationOfObserver(observer, 0);
@@ -336,7 +336,7 @@ public class JMatcherEntryClientTest {
 	}
 
 	@SuppressWarnings({ "unused", "unchecked" })
-	private void verifyCountOfNotificationOfObserver(final JMatcherEntryClientObserver observer, final int expectedTimes) {
+	private void verifyCountOfNotificationOfObserver(final JMatcherEntryObserver observer, final int expectedTimes) {
 		new Verifications() {
 			{
 				observer.updateConnectingHosts((Set<Host>) any, (UpdateEvent) any, (Host) any);

@@ -36,7 +36,7 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherConnectionClient implements Peer {
+public class JMatcherConnectionRequester implements Peer {
 
 	private String name;
 
@@ -60,7 +60,7 @@ public class JMatcherConnectionClient implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherConnectionClient(String name, String host) {
+	public JMatcherConnectionRequester(String name, String host) {
 		this(name, host, JMatcher.PORT);
 	}
 
@@ -71,7 +71,7 @@ public class JMatcherConnectionClient implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherConnectionClient(String name, String host, int port) {
+	public JMatcherConnectionRequester(String name, String host, int port) {
 		this.setNameIfNotConnecting(name);
 		this.jmatcherServer = host;
 		this.jmatcherServerPort = port;
