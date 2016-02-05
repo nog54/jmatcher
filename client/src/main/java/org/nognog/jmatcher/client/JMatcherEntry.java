@@ -385,6 +385,15 @@ public class JMatcherEntry implements Peer {
 	}
 
 	private void closeUDPCommunication() {
+		if (this.udpSocket != null) {
+			for (Host connectingHost : this.connectingHosts) {
+				try {
+					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCEL, this.name, connectingHost);
+				} catch (IOException e) {
+					// ignore
+				}
+			}
+		}
 		JMatcherClientUtil.close(this.udpSocket);
 		this.udpSocket = null;
 	}

@@ -292,14 +292,15 @@ public class JMatcherConnectionRequester implements Peer {
 				if (receivedJMatcherMessage == null) {
 					continue;
 				}
-				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.CONNECT_REQUEST) {
+				final JMatcherClientMessageType messageType = receivedJMatcherMessage.getType();
+				if (messageType == JMatcherClientMessageType.CONNECT_REQUEST) {
 					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, connectionTargetHost);
 					continue;
 				}
-				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL) {
+				if (messageType == JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL || messageType == JMatcherClientMessageType.CANCEL) {
 					return false;
 				}
-				if (receivedJMatcherMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
+				if (messageType == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
 					this.connectingHost = connectionTargetHost;
 					this.connectingHost.setName(receivedJMatcherMessage.getSenderName());
 					return true;
@@ -425,8 +426,12 @@ public class JMatcherConnectionRequester implements Peer {
 					continue;
 				}
 				final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
-				if (isNotJMatcherClientMessage(receivedMessage)) {
+				final JMatcherClientMessage jmatcherClientMessage = tryTransformToJMatcherClientMessage(receivedMessage);
+				if (jmatcherClientMessage == null) {
 					return new ReceivedMessage(this.connectingHost, receivedMessage);
+				} else if (JMatcherClientMessageType.CANCEL == jmatcherClientMessage.getType()) {
+					this.closeWithoutNotificationToConnectingHost();
+					return null;
 				}
 			}
 			System.err.println("JMatcherConnectionClient : abnormal state"); //$NON-NLS-1$
@@ -436,8 +441,8 @@ public class JMatcherConnectionRequester implements Peer {
 		}
 	}
 
-	private static boolean isNotJMatcherClientMessage(final String receiveMessage) {
-		return JMatcherClientMessage.deserialize(receiveMessage) == null;
+	private static JMatcherClientMessage tryTransformToJMatcherClientMessage(final String receiveMessage) {
+		return JMatcherClientMessage.deserialize(receiveMessage);
 	}
 
 	@Override
@@ -445,6 +450,10 @@ public class JMatcherConnectionRequester implements Peer {
 		if (!host.equals(this.connectingHost)) {
 			return null;
 		}
-		return this.receiveMessage().getMessage();
+		final ReceivedMessage receiveMessage = this.receiveMessage();
+		if (receiveMessage == null) {
+			return null;
+		}
+		return receiveMessage.getMessage();
 	}
 }
