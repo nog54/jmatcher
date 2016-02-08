@@ -15,6 +15,7 @@
 package org.nognog.jmatcher.client;
 
 import java.io.Closeable;
+import java.util.Set;
 
 import org.nognog.jmatcher.Host;
 
@@ -40,4 +41,9 @@ public interface Peer extends Closeable {
 	 * @return true if succeed in sending
 	 */
 	Host[] sendMessageTo(String message, Host... hosts);
+
+	/**
+	 * @return connecting hosts array
+	 */
+	Set<Host> getConnectingHosts();
 }

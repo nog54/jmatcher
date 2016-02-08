@@ -23,6 +23,8 @@ import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
@@ -36,7 +38,7 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherConnectionRequester implements Peer {
+public class JMatcherConnectionRequester {
 
 	private String name;
 
@@ -45,9 +47,6 @@ public class JMatcherConnectionRequester implements Peer {
 	private int internalNetworkPortTellerPort = JMatcher.PORT;
 	private int retryCount = defaultRetryCount;
 	private int receiveBuffSize = defaultBuffSize;
-
-	private DatagramSocket socket;
-	private Host connectingHost;
 
 	private static final int defaultRetryCount = 2;
 	private static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
@@ -72,7 +71,7 @@ public class JMatcherConnectionRequester implements Peer {
 	 *             It's thrown if failed to connect to the server
 	 */
 	public JMatcherConnectionRequester(String name, String host, int port) {
-		this.setNameIfNotConnecting(name);
+		this.setName(name);
 		this.jmatcherServer = host;
 		this.jmatcherServerPort = port;
 	}
@@ -88,22 +87,12 @@ public class JMatcherConnectionRequester implements Peer {
 	 * @param name
 	 *            the name to set
 	 */
-	public void setNameIfNotConnecting(String name) {
-		if (this.isConnecting()) {
-			return;
-		}
+	public void setName(String name) {
 		if (!JMatcherClientMessage.regardsAsValidName(name)) {
-			final String message = new StringBuilder().append("senderName is too long : ").append(name).toString(); //$NON-NLS-1$
+			final String message = new StringBuilder().append("name is too long : ").append(name).toString(); //$NON-NLS-1$
 			throw new IllegalArgumentException(message);
 		}
 		this.name = name;
-	}
-
-	/**
-	 * @return true if it is connecting
-	 */
-	public boolean isConnecting() {
-		return this.connectingHost != null;
 	}
 
 	/**
@@ -149,21 +138,6 @@ public class JMatcherConnectionRequester implements Peer {
 	 */
 	public void setRetryCount(int retryCount) {
 		this.retryCount = retryCount;
-	}
-
-	/**
-	 * @return socket to send packet to the connected entryClient, or null if it
-	 *         hasn't connected yet
-	 */
-	public DatagramSocket getConnectingSocket() {
-		return this.socket;
-	}
-
-	/**
-	 * @return connecting host
-	 */
-	public Host getConnectingHost() {
-		return this.connectingHost;
 	}
 
 	/**
@@ -213,64 +187,63 @@ public class JMatcherConnectionRequester implements Peer {
 	 * @throws IOException
 	 *             thrown if failed to communicate with other
 	 */
-	public boolean connect(int key) throws IOException {
-		if (this.socket != null || this.connectingHost != null) {
-			return false;
-		}
+	@SuppressWarnings("resource")
+	public JMatcherConnectionRequesterPeer connect(int key) throws IOException {
+		final DatagramSocket socket = new DatagramSocket();
 		try {
-			final boolean success = this.tryToConnect(key);
-			if (!success) {
-				this.closeWithoutNotificationToConnectingHost();
+			final JMatcherConnectionRequesterPeer peer = this.tryToConnect(key, socket);
+			if (peer == null) {
+				JMatcherClientUtil.close(socket);
+				return null;
 			}
-			return success;
-		} catch (IOException e) {
-			this.closeWithoutNotificationToConnectingHost();
+			return peer;
+		} catch (Exception e) {
+			JMatcherClientUtil.close(socket);
 			throw e;
 		}
 	}
 
-	private boolean tryToConnect(int key) throws IOException {
-		this.socket = new DatagramSocket();
-		this.setupUDPSocket(this.socket);
-		Host connectionTargetHost = this.getTargetHostFromServer(key);
+	private JMatcherConnectionRequesterPeer tryToConnect(int key, DatagramSocket socket) throws IOException {
+		this.setupUDPSocket(socket);
+		Host connectionTargetHost = this.getTargetHostFromServer(key, socket);
 		if (connectionTargetHost == null) {
-			return false;
+			return null;
 		}
 		if (SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.equals(connectionTargetHost.getAddress())) {
-			connectionTargetHost = this.findInternalNetworkEntryHost(key);
+			connectionTargetHost = this.findInternalNetworkEntryHost(key, socket);
 			if (connectionTargetHost == null) {
-				return false;
+				return null;
 			}
 		}
 		for (int i = 0; i < this.retryCount; i++) {
-			final boolean success = this.tryToConnectTo(connectionTargetHost);
-			if (success) {
-				return true;
+			final JMatcherConnectionRequesterPeer peer = this.tryToConnectTo(connectionTargetHost, socket);
+			if (peer != null) {
+				return peer;
 			}
 		}
-		return false;
+		return null;
 	}
 
-	private Host getTargetHostFromServer(int key) {
+	private Host getTargetHostFromServer(int key, DatagramSocket socket) throws IOException {
 		for (int i = 0; i < this.retryCount; i++) {
 			try {
-				JMatcherClientUtil.sendUDPRequest(this.socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherServer, this.jmatcherServerPort));
-				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(this.socket, this.receiveBuffSize);
+				JMatcherClientUtil.sendUDPRequest(socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherServer, this.jmatcherServerPort));
+				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(socket, this.receiveBuffSize);
 				return response.getHost();
-			} catch (Exception e) {
+			} catch (SocketTimeoutException | ClassCastException | IllegalArgumentException e) {
 				// failed
 			}
 		}
 		return null;
 	}
 
-	private Host findInternalNetworkEntryHost(int key) {
+	private Host findInternalNetworkEntryHost(int key, DatagramSocket socket) {
 		try {
 			for (final InterfaceAddress networkInterface : NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getInterfaceAddresses()) {
 				try {
 					final InetSocketAddress broadcastSocketAddress = new InetSocketAddress(networkInterface.getBroadcast(), this.internalNetworkPortTellerPort);
-					JMatcherClientUtil.sendMessage(this.socket, String.valueOf(key), broadcastSocketAddress);
-					final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
+					JMatcherClientUtil.sendMessage(socket, String.valueOf(key), broadcastSocketAddress);
+					final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(socket, this.receiveBuffSize);
 					final int toldPort = Integer.valueOf(JMatcherClientUtil.getMessageFrom(packet)).intValue();
 					final String address = packet.getAddress().getHostAddress();
 					return new Host(address, toldPort);
@@ -284,176 +257,214 @@ public class JMatcherConnectionRequester implements Peer {
 		return null;
 	}
 
-	private boolean tryToConnectTo(final Host connectionTargetHost) throws IOException {
-		JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
+	private JMatcherConnectionRequesterPeer tryToConnectTo(final Host connectionTargetHost, DatagramSocket socket) throws IOException {
+		JMatcherClientUtil.sendJMatcherClientMessage(socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-				final JMatcherClientMessage receivedJMatcherMessage = this.tryToReceiveJMatcherMessageFrom(connectionTargetHost);
+				final JMatcherClientMessage receivedJMatcherMessage = tryToReceiveJMatcherMessageFrom(connectionTargetHost, socket, this.receiveBuffSize);
 				if (receivedJMatcherMessage == null) {
 					continue;
 				}
 				final JMatcherClientMessageType messageType = receivedJMatcherMessage.getType();
 				if (messageType == JMatcherClientMessageType.CONNECT_REQUEST) {
-					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, connectionTargetHost);
+					JMatcherClientUtil.sendJMatcherClientMessage(socket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, connectionTargetHost);
 					continue;
 				}
 				if (messageType == JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL || messageType == JMatcherClientMessageType.CANCEL) {
-					return false;
+					return null;
 				}
 				if (messageType == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
-					this.connectingHost = connectionTargetHost;
-					this.connectingHost.setName(receivedJMatcherMessage.getSenderName());
-					return true;
+					connectionTargetHost.setName(receivedJMatcherMessage.getSenderName());
+					return new JMatcherConnectionRequesterPeer(this.name, socket, connectionTargetHost, this.receiveBuffSize, this.retryCount);
 				}
 			}
 		} catch (SocketTimeoutException e) {
 			// one of the end conditions
 		}
-		return false;
+		return null;
 	}
 
-	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host) throws IOException {
-		final DatagramPacket packet = tryToReceiveDatagramPacketFrom(host);
+	static JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host, DatagramSocket socket, int receiveBuffSize) throws SocketTimeoutException, IOException {
+		final DatagramPacket packet = tryToReceiveUDPPacketFrom(host, socket, receiveBuffSize);
 		return JMatcherClientUtil.getJMatcherMessageFrom(packet);
 	}
 
-	private DatagramPacket tryToReceiveDatagramPacketFrom(Host host) throws SocketTimeoutException, IOException {
-		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
+	static DatagramPacket tryToReceiveUDPPacketFrom(Host host, DatagramSocket socket, int receiveBuffSize) throws SocketTimeoutException, IOException {
+		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(socket, receiveBuffSize);
 		if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
 			return null;
 		}
 		return packet;
 	}
 
-	@Override
-	public void close() throws IOException {
-		this.cancelConnection();
-	}
-
 	/**
-	 * Close it without notification to the connecting host. We should generally
-	 * use {@link #close()} or {@link #cancelConnection()} instead of this
-	 * method
+	 * @author goshi 2016/02/08
 	 */
-	public void closeWithoutNotificationToConnectingHost() {
-		JMatcherClientUtil.close(this.socket);
-		this.socket = null;
-		this.connectingHost = null;
-	}
+	public static class JMatcherConnectionRequesterPeer implements Peer {
+		private String name;
+		private final DatagramSocket socket;
+		private final Host connectingHost;
+		private int receiveBuffSize;
+		private int retryCount;
 
-	/**
-	 * Cancel connection. We should invoke this method instead of
-	 * {@link #close()} if we want to notify the connecting host that it will be
-	 * closed. Otherwise, the JMatcherEntryClient won't know this has already
-	 * been closed.
-	 * <p>
-	 * <b> Note: Whether it returns true or not, this object will have closed
-	 * after this method. </b>
-	 * </p>
-	 * 
-	 * 
-	 * @return true if succeed in cancellation
-	 * @throws IOException
-	 *             thrown if failed to communicate with other
-	 */
-	public boolean cancelConnection() throws IOException {
-		if (this.socket == null || this.connectingHost == null) {
-			return false;
-		}
-		try {
-			for (int i = 0; i < this.retryCount; i++) {
-				JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
-				try {
-					for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-						final JMatcherClientMessage receivedMessage = this.tryToReceiveJMatcherMessageFrom(this.connectingHost);
-						if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
-							return true;
-						}
-					}
-				} catch (SocketTimeoutException e) {
-					// one of the end conditions
-				}
+		JMatcherConnectionRequesterPeer(String name, DatagramSocket socket, Host connectingHost, int receiveBuffSize, int retryCount) {
+			if (socket == null || connectingHost == null) {
+				throw new IllegalArgumentException();
 			}
-		} finally {
-			this.closeWithoutNotificationToConnectingHost();
+			this.name = name;
+			this.socket = socket;
+			this.connectingHost = connectingHost;
+			this.receiveBuffSize = receiveBuffSize;
+			this.retryCount = retryCount;
 		}
-		return false;
-	}
 
-	@Override
-	public Host[] sendMessageTo(String message, Host... hosts) {
-		if (hosts.length != 1 || hosts[0].equals(this.connectingHost) == false) {
+		@Override
+		public void close() {
+			if (this.socket.isClosed()) {
+				return;
+			}
+			try {
+				for (int i = 0; i < this.retryCount; i++) {
+					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
+					try {
+						for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
+							final JMatcherClientMessage receivedMessage = tryToReceiveJMatcherMessageFrom(this.connectingHost, this.socket, this.receiveBuffSize);
+							if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
+								return;
+							}
+						}
+					} catch (SocketTimeoutException e) {
+						// one of the end conditions
+					}
+				}
+			} catch (IOException e) {
+				return;
+			} finally {
+				JMatcherClientUtil.close(this.socket);
+			}
+		}
+
+		@Override
+		public ReceivedMessage receiveMessage() {
+			if (this.socket.isClosed()) {
+				return null;
+			}
+			try {
+				for (int i = 0; i < this.retryCount; i++) {
+					final DatagramPacket packet = JMatcherConnectionRequester.tryToReceiveUDPPacketFrom(this.connectingHost, this.socket, this.receiveBuffSize);
+					if (packet == null) {
+						continue;
+					}
+					final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
+					final JMatcherClientMessage jmatcherClientMessage = tryTransformToJMatcherClientMessage(receivedMessage);
+					if (jmatcherClientMessage == null) {
+						return new ReceivedMessage(this.connectingHost, receivedMessage);
+					} else if (JMatcherClientMessageType.CANCEL == jmatcherClientMessage.getType()) {
+						this.closeWithoutNotificationToConnectingHost();
+						return null;
+					}
+				}
+				System.err.println("JMatcherConnectionClient : abnormal state"); //$NON-NLS-1$
+				return null;
+			} catch (IOException e) {
+				return null;
+			}
+		}
+
+		/**
+		 * Close it without notification to the connecting host. We should
+		 * generally use {@link #close()} or {@link #cancelConnection()} instead
+		 * of this method
+		 */
+		public void closeWithoutNotificationToConnectingHost() {
+			JMatcherClientUtil.close(this.socket);
+		}
+
+		private static JMatcherClientMessage tryTransformToJMatcherClientMessage(final String receiveMessage) {
+			return JMatcherClientMessage.deserialize(receiveMessage);
+		}
+
+		@Override
+		public String receiveMessageFrom(Host host) {
+			if (!host.equals(this.connectingHost)) {
+				return null;
+			}
+			final ReceivedMessage receiveMessage = this.receiveMessage();
+			if (receiveMessage == null) {
+				return null;
+			}
+			return receiveMessage.getMessage();
+		}
+
+		@Override
+		public Host[] sendMessageTo(String message, Host... hosts) {
+			if (hosts.length != 1 || hosts[0].equals(this.connectingHost) == false) {
+				return new Host[0];
+			}
+			final boolean success = this.sendMessage(message);
+			if (success) {
+				final Host[] result = new Host[1];
+				result[0] = hosts[0];
+				return result;
+			}
 			return new Host[0];
 		}
-		final boolean success = this.sendMessage(message);
-		if (success) {
-			final Host[] result = new Host[1];
-			result[0] = hosts[0];
+
+		/**
+		 * @param message
+		 * @return true if succeed in sending
+		 * @throws IOException
+		 */
+		public boolean sendMessage(String message) {
+			if (message == null || this.socket.isClosed()) {
+				return false;
+			}
+			try {
+				JMatcherClientUtil.sendMessage(this.socket, message, this.connectingHost);
+			} catch (IOException e) {
+				return false;
+			}
+			return true;
+		}
+
+		/**
+		 * @return the connectingHost
+		 */
+		public Host getConnectingHost() {
+			return this.connectingHost;
+		}
+
+		@Override
+		public Set<Host> getConnectingHosts() {
+			final Set<Host> result = new HashSet<>();
+			if (this.socket.isClosed()) {
+				return result;
+			}
+			result.add(this.connectingHost);
 			return result;
 		}
-		return new Host[0];
-	}
 
-	/**
-	 * @param message
-	 * @return true if succeed in sending
-	 * @throws IOException
-	 */
-	public boolean sendMessage(String message) {
-		if (this.socket == null || this.connectingHost == null || message == null || this.socket.isClosed()) {
-			return false;
+		/**
+		 * @return the socket
+		 */
+		public DatagramSocket getSocket() {
+			return this.socket;
 		}
-		try {
-			JMatcherClientUtil.sendMessage(this.socket, message, this.connectingHost);
-		} catch (IOException e) {
-			return false;
-		}
-		return true;
-	}
 
-	/**
-	 * @return message from connectingHost
-	 */
-	@Override
-	public ReceivedMessage receiveMessage() {
-		if (this.socket == null || this.connectingHost == null || this.socket.isClosed()) {
-			return null;
+		/**
+		 * @return the name
+		 */
+		public String getName() {
+			return this.name;
 		}
-		try {
-			for (int i = 0; i < this.retryCount; i++) {
-				final DatagramPacket packet = this.tryToReceiveDatagramPacketFrom(this.connectingHost);
-				if (packet == null) {
-					continue;
-				}
-				final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
-				final JMatcherClientMessage jmatcherClientMessage = tryTransformToJMatcherClientMessage(receivedMessage);
-				if (jmatcherClientMessage == null) {
-					return new ReceivedMessage(this.connectingHost, receivedMessage);
-				} else if (JMatcherClientMessageType.CANCEL == jmatcherClientMessage.getType()) {
-					this.closeWithoutNotificationToConnectingHost();
-					return null;
-				}
-			}
-			System.err.println("JMatcherConnectionClient : abnormal state"); //$NON-NLS-1$
-			return null;
-		} catch (IOException e) {
-			return null;
-		}
-	}
 
-	private static JMatcherClientMessage tryTransformToJMatcherClientMessage(final String receiveMessage) {
-		return JMatcherClientMessage.deserialize(receiveMessage);
-	}
+		/**
+		 * @param name
+		 *            the name to set
+		 */
+		public void setName(String name) {
+			this.name = name;
+		}
 
-	@Override
-	public String receiveMessageFrom(Host host) {
-		if (!host.equals(this.connectingHost)) {
-			return null;
-		}
-		final ReceivedMessage receiveMessage = this.receiveMessage();
-		if (receiveMessage == null) {
-			return null;
-		}
-		return receiveMessage.getMessage();
 	}
 }

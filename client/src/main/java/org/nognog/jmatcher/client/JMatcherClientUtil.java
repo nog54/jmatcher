@@ -36,7 +36,7 @@ public class JMatcherClientUtil {
 
 	static void sendUDPRequest(DatagramSocket datagramSocket, UDPRequest request, SocketAddress address) throws IOException {
 		final String serializedRequest = UDPRequestSerializer.getInstance().serialize(request);
-		sendUDPPacket(datagramSocket, serializedRequest, address);
+		sendMessage(datagramSocket, serializedRequest, address);
 	}
 
 	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, Host host) throws IOException {
@@ -44,18 +44,14 @@ public class JMatcherClientUtil {
 	}
 
 	static void sendJMatcherClientMessage(DatagramSocket datagramSocket, JMatcherClientMessageType type, String senderName, InetSocketAddress address) throws IOException {
-		sendUDPPacket(datagramSocket, JMatcherClientMessage.serialize(new JMatcherClientMessage(type, senderName)), address);
+		sendMessage(datagramSocket, JMatcherClientMessage.serialize(new JMatcherClientMessage(type, senderName)), address);
 	}
 
 	public static void sendMessage(DatagramSocket datagramSocket, String message, Host host) throws IOException {
-		sendUDPPacket(datagramSocket, message, new InetSocketAddress(host.getAddress(), host.getPort()));
+		sendMessage(datagramSocket, message, new InetSocketAddress(host.getAddress(), host.getPort()));
 	}
 
 	public static void sendMessage(DatagramSocket datagramSocket, String message, SocketAddress address) throws IOException {
-		sendUDPPacket(datagramSocket, message, address);
-	}
-
-	private static void sendUDPPacket(DatagramSocket datagramSocket, String message, SocketAddress address) throws IOException {
 		final byte[] buf = message.getBytes();
 		final DatagramPacket packet = new DatagramPacket(buf, buf.length, address);
 		datagramSocket.send(packet);

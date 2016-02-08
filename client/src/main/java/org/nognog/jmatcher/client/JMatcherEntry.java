@@ -128,7 +128,7 @@ public class JMatcherEntry implements Peer {
 			return false;
 		}
 		if (!JMatcherClientMessage.regardsAsValidName(name)) {
-			final String message = new StringBuilder().append("senderName is too long : ").append(name).toString(); //$NON-NLS-1$
+			final String message = new StringBuilder().append("name is too long : ").append(name).toString(); //$NON-NLS-1$
 			throw new IllegalArgumentException(message);
 		}
 		this.name = name;
@@ -168,6 +168,7 @@ public class JMatcherEntry implements Peer {
 	/**
 	 * @return connecting hosts
 	 */
+	@Override
 	public Set<Host> getConnectingHosts() {
 		return new HashSet<>(this.connectingHosts);
 	}

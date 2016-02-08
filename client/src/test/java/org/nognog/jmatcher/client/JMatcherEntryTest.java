@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
+import org.nognog.jmatcher.client.JMatcherConnectionRequester.JMatcherConnectionRequesterPeer;
 import org.nognog.jmatcher.server.JMatcherDaemon;
 
 import mockit.Deencapsulation;
@@ -256,7 +257,8 @@ public class JMatcherEntryTest {
 					final JMatcherConnectionRequester parallelConnectionClient = new JMatcherConnectionRequester(null, jmatcherHost);
 					parallelConnectionClient.setInternalNetworkPortTellerPort(portTellerPort);
 					try {
-						assertThat(parallelConnectionClient.connect(entryKey), is(true));
+						final JMatcherConnectionRequesterPeer peer = parallelConnectionClient.connect(entryKey);
+						assertThat(peer, is(is(not(nullValue()))));
 					} catch (IOException | AssertionError e) {
 						failedThreadsCount.incrementAndGet();
 					}
@@ -306,18 +308,18 @@ public class JMatcherEntryTest {
 			entryClient.setPortTellerPort(tellerPort);
 			Integer key = entryClient.startInvitation();
 			assertThat(key, is(not(nullValue())));
-			try (JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(null, jmatcherHost)) {
-				connectionClient.setInternalNetworkPortTellerPort(tellerPort);
-				connectionClient.connect(key);
+			JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(null, jmatcherHost);
+			connectionClient.setInternalNetworkPortTellerPort(tellerPort);
+			try (Peer peer = connectionClient.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 0);
-				connectionClient.cancelConnection();
-				this.verifyCountOfNotificationOfObserver(observer, 0);
-				entryClient.addObserver(observer);
-				connectionClient.connect(key);
+			}
+			this.verifyCountOfNotificationOfObserver(observer, 0);
+			entryClient.addObserver(observer);
+			try (Peer peer = connectionClient.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 1);
-				connectionClient.cancelConnection();
-				this.verifyCountOfNotificationOfObserver(observer, 2);
-				connectionClient.connect(key);
+			}
+			this.verifyCountOfNotificationOfObserver(observer, 2);
+			try (Peer peer = connectionClient.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 3);
 				entryClient.stopInvitation();
 				this.verifyCountOfNotificationOfObserver(observer, 3);
@@ -325,11 +327,9 @@ public class JMatcherEntryTest {
 				this.verifyCountOfNotificationOfObserver(observer, 4);
 				key = entryClient.startInvitation();
 				this.verifyCountOfNotificationOfObserver(observer, 4);
-				connectionClient.connect(key);
-				this.verifyCountOfNotificationOfObserver(observer, 4);
-				connectionClient.cancelConnection();
-				this.verifyCountOfNotificationOfObserver(observer, 4);
-				connectionClient.connect(key);
+			}
+			this.verifyCountOfNotificationOfObserver(observer, 4);
+			try (Peer peer = connectionClient.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 5);
 			}
 		}
