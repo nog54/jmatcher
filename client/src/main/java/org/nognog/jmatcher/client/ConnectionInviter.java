@@ -48,7 +48,7 @@ import org.nognog.jmatcher.udp.request.EnableEntryRequest;
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherEntry implements Peer {
+public class ConnectionInviter implements Peer {
 
 	private String name;
 
@@ -75,7 +75,7 @@ public class JMatcherEntry implements Peer {
 	private Set<Host> connectingHosts;
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
 
-	private Set<JMatcherEntryObserver> observers;
+	private Set<ConnectionInviterObserver> observers;
 
 	static final int defalutRetryCount = 2;
 	static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
@@ -88,7 +88,7 @@ public class JMatcherEntry implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherEntry(String name, String jmatcherServer) {
+	public ConnectionInviter(String name, String jmatcherServer) {
 		this(name, jmatcherServer, JMatcher.PORT);
 	}
 
@@ -99,7 +99,7 @@ public class JMatcherEntry implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherEntry(String name, String jmatcherServer, int port) {
+	public ConnectionInviter(String name, String jmatcherServer, int port) {
 		// it contains validation of the name
 		this.setNameIfNotCommunicating(name);
 		this.jmatcherServer = jmatcherServer;
@@ -265,19 +265,19 @@ public class JMatcherEntry implements Peer {
 	/**
 	 * @param observer
 	 */
-	public void addObserver(JMatcherEntryObserver observer) {
+	public void addObserver(ConnectionInviterObserver observer) {
 		this.observers.add(observer);
 	}
 
 	/**
 	 * @param observer
 	 */
-	public void removeObserver(JMatcherEntryObserver observer) {
+	public void removeObserver(ConnectionInviterObserver observer) {
 		this.observers.remove(observer);
 	}
 
 	private void notifyObservers(UpdateEvent event, Host target) {
-		for (JMatcherEntryObserver observer : this.observers) {
+		for (ConnectionInviterObserver observer : this.observers) {
 			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts), event, target);
 		}
 	}
@@ -357,11 +357,14 @@ public class JMatcherEntry implements Peer {
 	}
 
 	/**
-	 * close all connections
-	 * 
-	 * @throws IOException
+	 * Stop all communication. It should be used when Reinvitation is no longer
+	 * done.
 	 */
-	public void closeAllConnections() {
+	public void stopCommunication() {
+		this.closeAllConnections();
+	}
+
+	private void closeAllConnections() {
 		this.closeTCPCommunication();
 		this.closeUDPCommunication();
 		this.requestingHosts.clear();
@@ -431,10 +434,10 @@ public class JMatcherEntry implements Peer {
 				@Override
 				public void run() {
 					try {
-						JMatcherEntry.this.performTellerLoop(portTellerSocket);
+						ConnectionInviter.this.performTellerLoop(portTellerSocket);
 					} finally {
 						portTellerSocket.close();
-						JMatcherEntry.this.portTellerThread = null;
+						ConnectionInviter.this.portTellerThread = null;
 					}
 				}
 			});
@@ -479,9 +482,9 @@ public class JMatcherEntry implements Peer {
 			@Override
 			public void run() {
 				try {
-					JMatcherEntry.this.performCommunicationLoop();
+					ConnectionInviter.this.performCommunicationLoop();
 				} finally {
-					JMatcherEntry.this.communicationThread = null;
+					ConnectionInviter.this.communicationThread = null;
 				}
 			}
 		});
@@ -645,6 +648,9 @@ public class JMatcherEntry implements Peer {
 
 	@Override
 	public ReceivedMessage receiveMessage() {
+		if (!this.isCommunicating()) {
+			return null;
+		}
 		try {
 			return this.receivedMessageBuffer.poll(this.udpSocket.getSoTimeout());
 		} catch (SocketException e) {
@@ -654,6 +660,9 @@ public class JMatcherEntry implements Peer {
 
 	@Override
 	public String receiveMessageFrom(Host host) {
+		if (!this.isCommunicating()) {
+			return null;
+		}
 		try {
 			final ReceivedMessage receivedMessage = this.receivedMessageBuffer.poll(host, this.udpSocket.getSoTimeout());
 			if (receivedMessage == null) {
@@ -672,6 +681,9 @@ public class JMatcherEntry implements Peer {
 	 */
 	@Override
 	public Host[] sendMessageTo(String message, Host... hosts) {
+		if (!this.isCommunicating()) {
+			return new Host[0];
+		}
 		final List<Host> successHost = new ArrayList<>();
 		for (Host host : hosts) {
 			if (sendMessageTo(message, host)) {

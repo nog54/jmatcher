@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
-import org.nognog.jmatcher.client.JMatcherConnectionRequester.JMatcherConnectionRequesterPeer;
+import org.nognog.jmatcher.client.Connector.ConnectorPeer;
 import org.nognog.jmatcher.server.JMatcherDaemon;
 
 import mockit.Deencapsulation;
@@ -40,11 +40,10 @@ import mockit.Verifications;
  * @author goshi 2015/12/28
  */
 @SuppressWarnings({ "static-method", "boxing" })
-public class JMatcherEntryTest {
+public class ConnectionInviterTest {
 
 	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#startInvitation()}.
+	 * Test method for {@link org.nognog.jmatcher.client.ConnectionInviter#startInvitation()}.
 	 * 
 	 * @throws Exception
 	 */
@@ -69,83 +68,79 @@ public class JMatcherEntryTest {
 	private void doStartInvitation(JMatcherDaemon daemon, int portTellerPort) throws IOException, InterruptedException {
 		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
 		final int wrongPort = 80;
-		try (final JMatcherEntry entryClient = new JMatcherEntry(null, wrongJmatcherHost, wrongPort)) {
-			entryClient.setPortTellerPort(portTellerPort);
-			assertThat(entryClient.getJmatcherServer(), is(wrongJmatcherHost));
-			assertThat(entryClient.getConnectingHosts(), is(not(nullValue())));
-			assertThat(entryClient.getConnectingHosts().size(), is(0));
-			assertThat(entryClient.getJMatcherServerPort(), is(wrongPort));
-			assertThat(entryClient.getRetryCount(), is(JMatcherEntry.defalutRetryCount));
+		try (final ConnectionInviter inviter = new ConnectionInviter(null, wrongJmatcherHost, wrongPort)) {
+			inviter.setPortTellerPort(portTellerPort);
+			assertThat(inviter.getJmatcherServer(), is(wrongJmatcherHost));
+			assertThat(inviter.getConnectingHosts(), is(not(nullValue())));
+			assertThat(inviter.getConnectingHosts().size(), is(0));
+			assertThat(inviter.getJMatcherServerPort(), is(wrongPort));
+			assertThat(inviter.getRetryCount(), is(ConnectionInviter.defalutRetryCount));
 			// ---- Test with wrong configuration ----
 			try {
-				entryClient.startInvitation();
+				inviter.startInvitation();
 				fail();
 			} catch (IOException e) {
 				// ok
 			}
 			final String jmatcherHost = "localhost"; //$NON-NLS-1$
-			entryClient.setJMatcherServer(jmatcherHost);
+			inviter.setJMatcherServer(jmatcherHost);
 
 			try {
-				entryClient.startInvitation();
+				inviter.startInvitation();
 				fail();
 			} catch (IOException e) {
 				// ok
 			}
-			entryClient.setJMatcherServerPort(JMatcher.PORT);
+			inviter.setJMatcherServerPort(JMatcher.PORT);
 			// ---- start invitation correctly ----
-			final Integer entryKey1 = entryClient.startInvitation();
+			final Integer entryKey1 = inviter.startInvitation();
 			assertThat(entryKey1, is(not(nullValue())));
 			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(true));
 			assertThat(daemon.getMatchingMap().keySet().size(), is(1));
 			// ---- start invitation in case it has already started ----
-			final Integer entryKey2 = entryClient.startInvitation();
+			final Integer entryKey2 = inviter.startInvitation();
 			assertThat(entryKey2, is(nullValue()));
 			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(true));
 			assertThat(daemon.getMatchingMap().keySet().size(), is(1));
 			// ---- stop invitation ----
-			entryClient.stopInvitation();
+			inviter.stopInvitation();
 			Thread.sleep(500); // wait for end of TCPClientRequestHandler
 			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(false));
 			assertThat(daemon.getMatchingMap().keySet().size(), is(0));
 			// ---- start invitation in case it still has connection in udp ----
-			final Integer entryKey3 = entryClient.startInvitation();
+			final Integer entryKey3 = inviter.startInvitation();
 			assertThat(entryKey3, is(nullValue()));
 			assertThat(daemon.getMatchingMap().keySet().contains(entryKey1), is(false));
 			assertThat(daemon.getMatchingMap().keySet().size(), is(0));
 
-			entryClient.closeAllConnections();
+			inviter.stopCommunication();
 			// ---- start invitation again after close all ----
-			final Integer entryKey4 = entryClient.startInvitation();
+			final Integer entryKey4 = inviter.startInvitation();
 			assertThat(entryKey4, is(not(nullValue())));
 			assertThat(daemon.getMatchingMap().keySet().contains(entryKey4), is(true));
 			assertThat(daemon.getMatchingMap().keySet().size(), is(1));
 
-			entryClient.closeAllConnections();
+			inviter.stopCommunication();
 			daemon.setMatchingMapCapacity(0);
 			// ---- start invitation in case the matching map is full ----
-			final Integer entryKey5 = entryClient.startInvitation();
+			final Integer entryKey5 = inviter.startInvitation();
 			assertThat(entryKey5, is(nullValue()));
 			assertThat(daemon.getMatchingMap().size(), is(0));
 			daemon.setMatchingMapCapacity(JMatcherDaemon.DEFAULT_MATCHING_MAP_CAPACITY);
 			// ---- start invitation after the matching map become not full ----
-			final Integer entryKey6 = entryClient.startInvitation();
+			final Integer entryKey6 = inviter.startInvitation();
 			assertThat(entryKey6, is(not(nullValue())));
-			entryClient.closeAllConnections();
-			// ---- start invitation after close entryClient without
-			// stopInvitation ----
-			final Integer entryKey7 = entryClient.startInvitation();
+			inviter.stopCommunication();
+			// ---- start invitation after stopCommunication without stopInvitation ----
+			final Integer entryKey7 = inviter.startInvitation();
 			assertThat(entryKey7, is(not(nullValue())));
-			entryClient.closeAllConnections();
+			inviter.stopCommunication();
 			Thread.sleep(500); // wait for end of TCPClientRequestHandler
 			assertThat(daemon.getMatchingMap().keySet().size(), is(0));
 		}
 	}
 
 	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#stopInvitation()}.
-	 * 
 	 * @throws Exception
 	 */
 	@Test
@@ -172,19 +167,19 @@ public class JMatcherEntryTest {
 	}
 
 	private void testInvitationWithFixedMaxSizeOfConnectingHosts(JMatcherDaemon daemon, final String jmatcherHost, int portTellerPort) throws IOException {
-		try (JMatcherEntry entryClient = new JMatcherEntry(null, jmatcherHost)) {
-			entryClient.setPortTellerPort(portTellerPort);
-			final Integer entryKey = entryClient.startInvitation();
+		try (ConnectionInviter connectionInviter = new ConnectionInviter(null, jmatcherHost)) {
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
 			final int numberOfParallelConnectionClient = 10;
 			this.testConnect(jmatcherHost, portTellerPort, entryKey, numberOfParallelConnectionClient, numberOfParallelConnectionClient);
-			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
+			assertThat(connectionInviter.getConnectingHosts().size(), is(numberOfParallelConnectionClient));
 			this.testConnect(jmatcherHost, portTellerPort, entryKey, 1, 1);
-			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
+			assertThat(connectionInviter.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
 			assertThat(daemon.getMatchingMap().size(), is(1));
-			entryClient.stopInvitation();
-			assertThat(entryClient.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
-			entryClient.closeAllConnections();
-			assertThat(entryClient.getConnectingHosts().size(), is(0));
+			connectionInviter.stopInvitation();
+			assertThat(connectionInviter.getConnectingHosts().size(), is(numberOfParallelConnectionClient + 1));
+			connectionInviter.stopCommunication();
+			assertThat(connectionInviter.getConnectingHosts().size(), is(0));
 			try {
 				// wait for end of TCPClientRequestHandler in the daemon
 				Thread.sleep(500);
@@ -196,47 +191,47 @@ public class JMatcherEntryTest {
 	}
 
 	private void testInvitationWithUnfixedMaxSizeOfConnectingHosts(final String jmatcherHost, int portTellerPort) throws IOException {
-		try (JMatcherEntry entryClient = new JMatcherEntry(null, jmatcherHost)) {
-			entryClient.setPortTellerPort(portTellerPort);
+		try (ConnectionInviter connectionInviter = new ConnectionInviter(null, jmatcherHost)) {
+			connectionInviter.setPortTellerPort(portTellerPort);
 			final int numberOfParallelConnectionClient = 20;
 			final int maxSizeOfConnectingHosts1 = 15;
-			entryClient.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts1);
-			final Integer entryKey = entryClient.startInvitation();
+			connectionInviter.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts1);
+			final Integer entryKey = connectionInviter.startInvitation();
 
 			this.testConnect(jmatcherHost, portTellerPort, entryKey, numberOfParallelConnectionClient, maxSizeOfConnectingHosts1);
-			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts1));
+			assertThat(connectionInviter.getConnectingHosts().size(), is(maxSizeOfConnectingHosts1));
 
 			final int maxSizeOfConnectingHosts2 = 24;
-			entryClient.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts2);
+			connectionInviter.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts2);
 			this.testConnect(jmatcherHost, portTellerPort, entryKey, numberOfParallelConnectionClient, maxSizeOfConnectingHosts2 - maxSizeOfConnectingHosts1);
-			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts2));
+			assertThat(connectionInviter.getConnectingHosts().size(), is(maxSizeOfConnectingHosts2));
 
 			final int maxSizeOfConnectingHosts3 = 22;
-			entryClient.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts3);
+			connectionInviter.setMaxSizeOfConnectingHosts(maxSizeOfConnectingHosts3);
 			this.testConnect(jmatcherHost, portTellerPort, entryKey, numberOfParallelConnectionClient, 0);
-			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts2));
+			assertThat(connectionInviter.getConnectingHosts().size(), is(maxSizeOfConnectingHosts2));
 
 			final int removeCountOfClient = maxSizeOfConnectingHosts2 / 2;
-			removeConnectingHostsForcibly(entryClient, removeCountOfClient);
+			removeConnectingHostsForcibly(connectionInviter, removeCountOfClient);
 			try {
 				this.testConnect(jmatcherHost, portTellerPort, entryKey, numberOfParallelConnectionClient, maxSizeOfConnectingHosts3 - (maxSizeOfConnectingHosts2 - removeCountOfClient));
 			} finally {
-				System.out.println(entryClient.getConnectingHosts().size());
+				System.out.println(connectionInviter.getConnectingHosts().size());
 			}
-			assertThat(entryClient.getConnectingHosts().size(), is(maxSizeOfConnectingHosts3));
+			assertThat(connectionInviter.getConnectingHosts().size(), is(maxSizeOfConnectingHosts3));
 		}
 	}
 
 	/**
-	 * @param entryClient
+	 * @param connectionInviter
 	 * @param removeCountOfClient
 	 */
-	private static void removeConnectingHostsForcibly(JMatcherEntry entryClient, int removeCountOfClient) {
-		final Set<Host> connectingHosts = Deencapsulation.getField(entryClient, "connectingHosts"); //$NON-NLS-1$
-		final Map<Host, InetSocketAddress> socketAddressCache = Deencapsulation.getField(entryClient, "socketAddressCache"); //$NON-NLS-1$
-		final ReceivedMessageBuffer receivedMessageBuffer = Deencapsulation.getField(entryClient, "receivedMessageBuffer"); //$NON-NLS-1$
+	private static void removeConnectingHostsForcibly(ConnectionInviter connectionInviter, int removeCountOfClient) {
+		final Set<Host> connectingHosts = Deencapsulation.getField(connectionInviter, "connectingHosts"); //$NON-NLS-1$
+		final Map<Host, InetSocketAddress> socketAddressCache = Deencapsulation.getField(connectionInviter, "socketAddressCache"); //$NON-NLS-1$
+		final ReceivedMessageBuffer receivedMessageBuffer = Deencapsulation.getField(connectionInviter, "receivedMessageBuffer"); //$NON-NLS-1$
 		int count = 0;
-		for (Host host : entryClient.getConnectingHosts()) {
+		for (Host host : connectionInviter.getConnectingHosts()) {
 			if (count++ >= removeCountOfClient) {
 				break;
 			}
@@ -246,18 +241,18 @@ public class JMatcherEntryTest {
 		}
 	}
 
-	private void testConnect(final String jmatcherHost, final int portTellerPort, final Integer entryKey, final int numberOfParallelConnectionClients, int expectSuccessCount) {
-		final Thread[] threads = new Thread[numberOfParallelConnectionClients];
+	private void testConnect(final String jmatcherHost, final int portTellerPort, final Integer entryKey, final int numberOfParallelConnectors, int expectSuccessCounts) {
+		final Thread[] threads = new Thread[numberOfParallelConnectors];
 		final AtomicInteger failedThreadsCount = new AtomicInteger(0);
-		for (int i = 0; i < numberOfParallelConnectionClients; i++) {
+		for (int i = 0; i < numberOfParallelConnectors; i++) {
 			threads[i] = new Thread(new Runnable() {
 				@SuppressWarnings("resource")
 				@Override
 				public void run() {
-					final JMatcherConnectionRequester parallelConnectionClient = new JMatcherConnectionRequester(null, jmatcherHost);
-					parallelConnectionClient.setInternalNetworkPortTellerPort(portTellerPort);
+					final Connector parallelConnector = new Connector(null, jmatcherHost);
+					parallelConnector.setInternalNetworkPortTellerPort(portTellerPort);
 					try {
-						final JMatcherConnectionRequesterPeer peer = parallelConnectionClient.connect(entryKey);
+						final ConnectorPeer peer = parallelConnector.connect(entryKey);
 						assertThat(peer, is(is(not(nullValue()))));
 					} catch (IOException | AssertionError e) {
 						failedThreadsCount.incrementAndGet();
@@ -266,27 +261,24 @@ public class JMatcherEntryTest {
 			});
 			threads[i].start();
 		}
-		for (int i = 0; i < numberOfParallelConnectionClients; i++) {
+		for (int i = 0; i < numberOfParallelConnectors; i++) {
 			try {
 				threads[i].join();
 			} catch (InterruptedException e) {
 				fail();
 			}
 		}
-		final int actualSuccessCount = numberOfParallelConnectionClients - failedThreadsCount.intValue();
-		assertThat(actualSuccessCount, is(expectSuccessCount));
+		final int actualSuccessCount = numberOfParallelConnectors - failedThreadsCount.intValue();
+		assertThat(actualSuccessCount, is(expectSuccessCounts));
 	}
 
 	/**
-	 * Test method for
-	 * {@link org.nognog.jmatcher.JMatcherEntryClient#startInvitation()}.
-	 * 
 	 * @param observer
 	 * 
 	 * @throws Exception
 	 */
 	@Test
-	public final void testNotifyObservers(@Mocked JMatcherEntryObserver observer) throws Exception {
+	public final void testNotifyObservers(@Mocked ConnectionInviterObserver observer) throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
@@ -302,41 +294,41 @@ public class JMatcherEntryTest {
 	 * @param daemon
 	 * @throws IOException
 	 */
-	private void doTestObservers(JMatcherDaemon daemon, final JMatcherEntryObserver observer, int tellerPort) throws Exception {
+	private void doTestObservers(JMatcherDaemon daemon, final ConnectionInviterObserver observer, int tellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (JMatcherEntry entryClient = new JMatcherEntry(null, jmatcherHost)) {
-			entryClient.setPortTellerPort(tellerPort);
-			Integer key = entryClient.startInvitation();
+		try (ConnectionInviter connectionInviter = new ConnectionInviter(null, jmatcherHost)) {
+			connectionInviter.setPortTellerPort(tellerPort);
+			Integer key = connectionInviter.startInvitation();
 			assertThat(key, is(not(nullValue())));
-			JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(null, jmatcherHost);
-			connectionClient.setInternalNetworkPortTellerPort(tellerPort);
-			try (Peer peer = connectionClient.connect(key)) {
+			Connector connector = new Connector(null, jmatcherHost);
+			connector.setInternalNetworkPortTellerPort(tellerPort);
+			try (Peer peer = connector.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 0);
 			}
 			this.verifyCountOfNotificationOfObserver(observer, 0);
-			entryClient.addObserver(observer);
-			try (Peer peer = connectionClient.connect(key)) {
+			connectionInviter.addObserver(observer);
+			try (Peer peer = connector.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 1);
 			}
 			this.verifyCountOfNotificationOfObserver(observer, 2);
-			try (Peer peer = connectionClient.connect(key)) {
+			try (Peer peer = connector.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 3);
-				entryClient.stopInvitation();
+				connectionInviter.stopInvitation();
 				this.verifyCountOfNotificationOfObserver(observer, 3);
-				entryClient.closeAllConnections();
+				connectionInviter.stopCommunication();
 				this.verifyCountOfNotificationOfObserver(observer, 4);
-				key = entryClient.startInvitation();
+				key = connectionInviter.startInvitation();
 				this.verifyCountOfNotificationOfObserver(observer, 4);
 			}
 			this.verifyCountOfNotificationOfObserver(observer, 4);
-			try (Peer peer = connectionClient.connect(key)) {
+			try (Peer peer = connector.connect(key)) {
 				this.verifyCountOfNotificationOfObserver(observer, 5);
 			}
 		}
 	}
 
 	@SuppressWarnings({ "unused", "unchecked" })
-	private void verifyCountOfNotificationOfObserver(final JMatcherEntryObserver observer, final int expectedTimes) {
+	private void verifyCountOfNotificationOfObserver(final ConnectionInviterObserver observer, final int expectedTimes) {
 		new Verifications() {
 			{
 				observer.updateConnectingHosts((Set<Host>) any, (UpdateEvent) any, (Host) any);

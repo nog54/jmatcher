@@ -38,7 +38,7 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
  * 
  * @author goshi 2015/11/27
  */
-public class JMatcherConnectionRequester {
+public class Connector {
 
 	private String name;
 
@@ -59,7 +59,7 @@ public class JMatcherConnectionRequester {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherConnectionRequester(String name, String host) {
+	public Connector(String name, String host) {
 		this(name, host, JMatcher.PORT);
 	}
 
@@ -70,7 +70,7 @@ public class JMatcherConnectionRequester {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public JMatcherConnectionRequester(String name, String host, int port) {
+	public Connector(String name, String host, int port) {
 		this.setName(name);
 		this.jmatcherServer = host;
 		this.jmatcherServerPort = port;
@@ -188,10 +188,10 @@ public class JMatcherConnectionRequester {
 	 *             thrown if failed to communicate with other
 	 */
 	@SuppressWarnings("resource")
-	public JMatcherConnectionRequesterPeer connect(int key) throws IOException {
+	public ConnectorPeer connect(int key) throws IOException {
 		final DatagramSocket socket = new DatagramSocket();
 		try {
-			final JMatcherConnectionRequesterPeer peer = this.tryToConnect(key, socket);
+			final ConnectorPeer peer = this.tryToConnect(key, socket);
 			if (peer == null) {
 				JMatcherClientUtil.close(socket);
 				return null;
@@ -203,7 +203,7 @@ public class JMatcherConnectionRequester {
 		}
 	}
 
-	private JMatcherConnectionRequesterPeer tryToConnect(int key, DatagramSocket socket) throws IOException {
+	private ConnectorPeer tryToConnect(int key, DatagramSocket socket) throws IOException {
 		this.setupUDPSocket(socket);
 		Host connectionTargetHost = this.getTargetHostFromServer(key, socket);
 		if (connectionTargetHost == null) {
@@ -216,7 +216,7 @@ public class JMatcherConnectionRequester {
 			}
 		}
 		for (int i = 0; i < this.retryCount; i++) {
-			final JMatcherConnectionRequesterPeer peer = this.tryToConnectTo(connectionTargetHost, socket);
+			final ConnectorPeer peer = this.tryToConnectTo(connectionTargetHost, socket);
 			if (peer != null) {
 				return peer;
 			}
@@ -257,7 +257,7 @@ public class JMatcherConnectionRequester {
 		return null;
 	}
 
-	private JMatcherConnectionRequesterPeer tryToConnectTo(final Host connectionTargetHost, DatagramSocket socket) throws IOException {
+	private ConnectorPeer tryToConnectTo(final Host connectionTargetHost, DatagramSocket socket) throws IOException {
 		JMatcherClientUtil.sendJMatcherClientMessage(socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
@@ -275,7 +275,7 @@ public class JMatcherConnectionRequester {
 				}
 				if (messageType == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
 					connectionTargetHost.setName(receivedJMatcherMessage.getSenderName());
-					return new JMatcherConnectionRequesterPeer(this.name, socket, connectionTargetHost, this.receiveBuffSize, this.retryCount);
+					return new ConnectorPeer(this.name, socket, connectionTargetHost, this.receiveBuffSize, this.retryCount);
 				}
 			}
 		} catch (SocketTimeoutException e) {
@@ -300,14 +300,14 @@ public class JMatcherConnectionRequester {
 	/**
 	 * @author goshi 2016/02/08
 	 */
-	public static class JMatcherConnectionRequesterPeer implements Peer {
+	public static class ConnectorPeer implements Peer {
 		private String name;
 		private final DatagramSocket socket;
 		private final Host connectingHost;
 		private int receiveBuffSize;
 		private int retryCount;
 
-		JMatcherConnectionRequesterPeer(String name, DatagramSocket socket, Host connectingHost, int receiveBuffSize, int retryCount) {
+		ConnectorPeer(String name, DatagramSocket socket, Host connectingHost, int receiveBuffSize, int retryCount) {
 			if (socket == null || connectingHost == null) {
 				throw new IllegalArgumentException();
 			}
@@ -351,7 +351,7 @@ public class JMatcherConnectionRequester {
 			}
 			try {
 				for (int i = 0; i < this.retryCount; i++) {
-					final DatagramPacket packet = JMatcherConnectionRequester.tryToReceiveUDPPacketFrom(this.connectingHost, this.socket, this.receiveBuffSize);
+					final DatagramPacket packet = Connector.tryToReceiveUDPPacketFrom(this.connectingHost, this.socket, this.receiveBuffSize);
 					if (packet == null) {
 						continue;
 					}
@@ -373,7 +373,7 @@ public class JMatcherConnectionRequester {
 
 		/**
 		 * Close it without notification to the connecting host. We should
-		 * generally use {@link #close()} or {@link #cancelConnection()} instead
+		 * generally use {@link #close()} instead
 		 * of this method
 		 */
 		public void closeWithoutNotificationToConnectingHost() {

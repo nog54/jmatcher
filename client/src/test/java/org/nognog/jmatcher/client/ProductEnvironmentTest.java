@@ -24,7 +24,7 @@ import java.io.IOException;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.nognog.jmatcher.Host;
-import org.nognog.jmatcher.client.JMatcherConnectionRequester.JMatcherConnectionRequesterPeer;
+import org.nognog.jmatcher.client.Connector.ConnectorPeer;
 
 /**
  * @author goshi 2016/01/20
@@ -36,40 +36,40 @@ public class ProductEnvironmentTest {
 	@Test
 	public void testMakeConnection() throws IOException, InterruptedException {
 		final String jmatcherHost = "nog-jserver1.servehttp.com"; //$NON-NLS-1$
-		final String entryClientName = "Darjeeling"; //$NON-NLS-1$
-		final String connectionClientName = "EarlGrey"; //$NON-NLS-1$
-		try (final JMatcherEntry entryClient = new JMatcherEntry(entryClientName, jmatcherHost)) {
-			final Integer entryKey = entryClient.startInvitation();
+		final String inviterName = "Darjeeling"; //$NON-NLS-1$
+		final String connectorName = "EarlGrey"; //$NON-NLS-1$
+		try (final ConnectionInviter inviter = new ConnectionInviter(inviterName, jmatcherHost)) {
+			final Integer entryKey = inviter.startInvitation();
 			System.out.println("Product Environment test : invite with " + entryKey); //$NON-NLS-1$
-			final JMatcherConnectionRequester connectionClient = new JMatcherConnectionRequester(connectionClientName, jmatcherHost);
-			try (JMatcherConnectionRequesterPeer peer = connectionClient.connect(entryKey)) {
+			final Connector connector = new Connector(connectorName, jmatcherHost);
+			try (ConnectorPeer peer = connector.connect(entryKey)) {
 				assertThat(peer, is(not(nullValue())));
-				assertThat(entryClient.getConnectingHosts().size(), is(1));
-				assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
-				assertThat(peer.getConnectingHost().getName(), is(entryClientName));
+				assertThat(inviter.getConnectingHosts().size(), is(1));
+				assertThat(((Host) inviter.getConnectingHosts().toArray()[0]).getName(), is(connectorName));
+				assertThat(peer.getConnectingHost().getName(), is(inviterName));
 			}
-			// wait for entryClient to handle cancel-request
+			// wait for connectionInviter to handle cancel-request
 			Thread.sleep(250);
-			assertThat(entryClient.getConnectingHosts().size(), is(0));
+			assertThat(inviter.getConnectingHosts().size(), is(0));
 
-			try (JMatcherConnectionRequesterPeer peer = connectionClient.connect(entryKey)) {
+			try (ConnectorPeer peer = connector.connect(entryKey)) {
 				assertThat(peer, is(not(nullValue())));
-				assertThat(entryClient.getConnectingHosts().size(), is(1));
-				assertThat(((Host) entryClient.getConnectingHosts().toArray()[0]).getName(), is(connectionClientName));
-				assertThat(peer.getConnectingHost().getName(), is(entryClientName));
-				this.testSendMessageFromConnectionClientToEntryClient(peer, entryClient);
-				this.testSendMessageFromEntryClientToConnectionClient(entryClient, peer);
-				entryClient.stopInvitation();
-				this.testSendMessageFromConnectionClientToEntryClient(peer, entryClient);
-				this.testSendMessageFromEntryClientToConnectionClient(entryClient, peer);
+				assertThat(inviter.getConnectingHosts().size(), is(1));
+				assertThat(((Host) inviter.getConnectingHosts().toArray()[0]).getName(), is(connectorName));
+				assertThat(peer.getConnectingHost().getName(), is(inviterName));
+				this.testSendMessageFromConnectorToConnectionInviter(peer, inviter);
+				this.testSendMessageFromConnectionInviterToConnector(inviter, peer);
+				inviter.stopInvitation();
+				this.testSendMessageFromConnectorToConnectionInviter(peer, inviter);
+				this.testSendMessageFromConnectionInviterToConnector(inviter, peer);
 				peer.close();
 				try {
-					this.testSendMessageFromConnectionClientToEntryClient(peer, entryClient);
+					this.testSendMessageFromConnectorToConnectionInviter(peer, inviter);
 				} catch (Throwable t) {
 					// success
 				}
 				try {
-					this.testSendMessageFromEntryClientToConnectionClient(entryClient, peer);
+					this.testSendMessageFromConnectionInviterToConnector(inviter, peer);
 				} catch (Throwable t) {
 					// success
 				}
@@ -78,21 +78,36 @@ public class ProductEnvironmentTest {
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void testSendMessageFromConnectionClientToEntryClient(JMatcherConnectionRequesterPeer connectionRequesterPeer, JMatcherEntry entryClient) {
-		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
-		final String messageFromConnectionClient = "from connectionClient"; //$NON-NLS-1$
-		assertThat(connectionRequesterPeer.sendMessage(messageFromConnectionClient), is(true));
-		final String receivedMessage = entryClient.receiveMessageFrom(connectionClientHost);
-		assertThat(receivedMessage, is(messageFromConnectionClient));
+	private void testSendMessageFromConnectorToConnectionInviter(final ConnectorPeer connectorPeer, final ConnectionInviter connectionInviter) {
+		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
+		final String messageFromConnector1 = "from connector1"; //$NON-NLS-1$
+		assertThat(connectorPeer.sendMessage(messageFromConnector1), is(true));
+		final String failedMessage = connectionInviter.receiveMessageFrom(new Host(null, 0));
+		assertThat(failedMessage, is(not(messageFromConnector1)));
+		final String successMessage = connectionInviter.receiveMessageFrom(connectorHost);
+		assertThat(successMessage, is(messageFromConnector1));
+
+		final String messageFromConnector2 = "from connector2"; //$NON-NLS-1$
+		assertThat(connectorPeer.sendMessage(messageFromConnector2), is(true));
+		final ReceivedMessage receivedMessage = connectionInviter.receiveMessage();
+		assertThat(receivedMessage.getSender(), is(connectorHost));
+		assertThat(receivedMessage.getMessage(), is(messageFromConnector2));
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void testSendMessageFromEntryClientToConnectionClient(JMatcherEntry entryClient, JMatcherConnectionRequesterPeer connectionRequesterPeer) {
-		final Host connectionClientHost = (Host) entryClient.getConnectingHosts().toArray()[0];
-		final String messageFromEntryClient = "from entryClient"; //$NON-NLS-1$
-		assertThat(entryClient.sendMessageTo(messageFromEntryClient, connectionClientHost), is(true));
-		final ReceivedMessage receivedMessage = connectionRequesterPeer.receiveMessage();
-		assertThat(receivedMessage.getSender(), is(connectionRequesterPeer.getConnectingHost()));
-		assertThat(receivedMessage.getMessage(), is(messageFromEntryClient));
+	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviter connectionInviter, final ConnectorPeer connectorPeer) {
+		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
+		final String messageFromConnectionInviter1 = "from connectionInviter1"; //$NON-NLS-1$
+		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter1, connectorHost), is(true));
+		final String failedMessage = connectorPeer.receiveMessageFrom(new Host(null, 0));
+		assertThat(failedMessage, is(not(messageFromConnectionInviter1)));
+		final String successMessage = connectorPeer.receiveMessageFrom(connectorPeer.getConnectingHost());
+		assertThat(successMessage, is(messageFromConnectionInviter1));
+
+		final String messageFromConnectionInviter2 = "from connectionInviter2"; //$NON-NLS-1$
+		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter2, connectorHost), is(true));
+		final ReceivedMessage receivedMessage = connectorPeer.receiveMessage();
+		assertThat(receivedMessage.getSender(), is(connectorPeer.getConnectingHost()));
+		assertThat(receivedMessage.getMessage(), is(messageFromConnectionInviter2));
 	}
 }
