@@ -21,13 +21,13 @@ import org.nognog.jmatcher.Host;
 /**
  * @author goshi 2016/01/12
  */
-public interface ConnectionInviterObserver {
+public interface ConnectionInviterPeerObserver {
 	/**
 	 * update connecting hosts
 	 * 
 	 * @param connectingHosts
-	 * @param event 
-	 * @param target 
+	 * @param event
+	 * @param target
 	 */
 	void updateConnectingHosts(Set<Host> connectingHosts, UpdateEvent event, Host target);
 }

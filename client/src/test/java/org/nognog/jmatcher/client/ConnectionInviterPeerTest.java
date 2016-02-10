@@ -40,10 +40,10 @@ import mockit.Verifications;
  * @author goshi 2015/12/28
  */
 @SuppressWarnings({ "static-method", "boxing" })
-public class ConnectionInviterTest {
+public class ConnectionInviterPeerTest {
 
 	/**
-	 * Test method for {@link org.nognog.jmatcher.client.ConnectionInviter#startInvitation()}.
+	 * Test method for {@link org.nognog.jmatcher.client.ConnectionInviterPeer#startInvitation()}.
 	 * 
 	 * @throws Exception
 	 */
@@ -68,13 +68,13 @@ public class ConnectionInviterTest {
 	private void doStartInvitation(JMatcherDaemon daemon, int portTellerPort) throws IOException, InterruptedException {
 		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
 		final int wrongPort = 80;
-		try (final ConnectionInviter inviter = new ConnectionInviter(null, wrongJmatcherHost, wrongPort)) {
+		try (final ConnectionInviterPeer inviter = new ConnectionInviterPeer(null, wrongJmatcherHost, wrongPort)) {
 			inviter.setPortTellerPort(portTellerPort);
 			assertThat(inviter.getJmatcherServer(), is(wrongJmatcherHost));
 			assertThat(inviter.getConnectingHosts(), is(not(nullValue())));
 			assertThat(inviter.getConnectingHosts().size(), is(0));
 			assertThat(inviter.getJMatcherServerPort(), is(wrongPort));
-			assertThat(inviter.getRetryCount(), is(ConnectionInviter.defalutRetryCount));
+			assertThat(inviter.getRetryCount(), is(ConnectionInviterPeer.defalutRetryCount));
 			// ---- Test with wrong configuration ----
 			try {
 				inviter.startInvitation();
@@ -167,7 +167,7 @@ public class ConnectionInviterTest {
 	}
 
 	private void testInvitationWithFixedMaxSizeOfConnectingHosts(JMatcherDaemon daemon, final String jmatcherHost, int portTellerPort) throws IOException {
-		try (ConnectionInviter connectionInviter = new ConnectionInviter(null, jmatcherHost)) {
+		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(portTellerPort);
 			final Integer entryKey = connectionInviter.startInvitation();
 			final int numberOfParallelConnectionClient = 10;
@@ -191,7 +191,7 @@ public class ConnectionInviterTest {
 	}
 
 	private void testInvitationWithUnfixedMaxSizeOfConnectingHosts(final String jmatcherHost, int portTellerPort) throws IOException {
-		try (ConnectionInviter connectionInviter = new ConnectionInviter(null, jmatcherHost)) {
+		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(portTellerPort);
 			final int numberOfParallelConnectionClient = 20;
 			final int maxSizeOfConnectingHosts1 = 15;
@@ -226,7 +226,7 @@ public class ConnectionInviterTest {
 	 * @param connectionInviter
 	 * @param removeCountOfClient
 	 */
-	private static void removeConnectingHostsForcibly(ConnectionInviter connectionInviter, int removeCountOfClient) {
+	private static void removeConnectingHostsForcibly(ConnectionInviterPeer connectionInviter, int removeCountOfClient) {
 		final Set<Host> connectingHosts = Deencapsulation.getField(connectionInviter, "connectingHosts"); //$NON-NLS-1$
 		final Map<Host, InetSocketAddress> socketAddressCache = Deencapsulation.getField(connectionInviter, "socketAddressCache"); //$NON-NLS-1$
 		final ReceivedMessageBuffer receivedMessageBuffer = Deencapsulation.getField(connectionInviter, "receivedMessageBuffer"); //$NON-NLS-1$
@@ -278,7 +278,7 @@ public class ConnectionInviterTest {
 	 * @throws Exception
 	 */
 	@Test
-	public final void testNotifyObservers(@Mocked ConnectionInviterObserver observer) throws Exception {
+	public final void testNotifyObservers(@Mocked ConnectionInviterPeerObserver observer) throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
@@ -294,9 +294,9 @@ public class ConnectionInviterTest {
 	 * @param daemon
 	 * @throws IOException
 	 */
-	private void doTestObservers(JMatcherDaemon daemon, final ConnectionInviterObserver observer, int tellerPort) throws Exception {
+	private void doTestObservers(JMatcherDaemon daemon, final ConnectionInviterPeerObserver observer, int tellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (ConnectionInviter connectionInviter = new ConnectionInviter(null, jmatcherHost)) {
+		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(tellerPort);
 			Integer key = connectionInviter.startInvitation();
 			assertThat(key, is(not(nullValue())));
@@ -328,7 +328,7 @@ public class ConnectionInviterTest {
 	}
 
 	@SuppressWarnings({ "unused", "unchecked" })
-	private void verifyCountOfNotificationOfObserver(final ConnectionInviterObserver observer, final int expectedTimes) {
+	private void verifyCountOfNotificationOfObserver(final ConnectionInviterPeerObserver observer, final int expectedTimes) {
 		new Verifications() {
 			{
 				observer.updateConnectingHosts((Set<Host>) any, (UpdateEvent) any, (Host) any);

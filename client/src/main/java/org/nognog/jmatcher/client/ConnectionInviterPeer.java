@@ -48,7 +48,7 @@ import org.nognog.jmatcher.udp.request.EnableEntryRequest;
  * 
  * @author goshi 2015/11/27
  */
-public class ConnectionInviter implements Peer {
+public class ConnectionInviterPeer implements Peer {
 
 	private String name;
 
@@ -75,7 +75,7 @@ public class ConnectionInviter implements Peer {
 	private Set<Host> connectingHosts;
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
 
-	private Set<ConnectionInviterObserver> observers;
+	private Set<ConnectionInviterPeerObserver> observers;
 
 	static final int defalutRetryCount = 2;
 	static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
@@ -88,7 +88,7 @@ public class ConnectionInviter implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public ConnectionInviter(String name, String jmatcherServer) {
+	public ConnectionInviterPeer(String name, String jmatcherServer) {
 		this(name, jmatcherServer, JMatcher.PORT);
 	}
 
@@ -99,7 +99,7 @@ public class ConnectionInviter implements Peer {
 	 * @throws IOException
 	 *             It's thrown if failed to connect to the server
 	 */
-	public ConnectionInviter(String name, String jmatcherServer, int port) {
+	public ConnectionInviterPeer(String name, String jmatcherServer, int port) {
 		// it contains validation of the name
 		this.setNameIfNotCommunicating(name);
 		this.jmatcherServer = jmatcherServer;
@@ -265,19 +265,19 @@ public class ConnectionInviter implements Peer {
 	/**
 	 * @param observer
 	 */
-	public void addObserver(ConnectionInviterObserver observer) {
+	public void addObserver(ConnectionInviterPeerObserver observer) {
 		this.observers.add(observer);
 	}
 
 	/**
 	 * @param observer
 	 */
-	public void removeObserver(ConnectionInviterObserver observer) {
+	public void removeObserver(ConnectionInviterPeerObserver observer) {
 		this.observers.remove(observer);
 	}
 
 	private void notifyObservers(UpdateEvent event, Host target) {
-		for (ConnectionInviterObserver observer : this.observers) {
+		for (ConnectionInviterPeerObserver observer : this.observers) {
 			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts), event, target);
 		}
 	}
@@ -434,10 +434,10 @@ public class ConnectionInviter implements Peer {
 				@Override
 				public void run() {
 					try {
-						ConnectionInviter.this.performTellerLoop(portTellerSocket);
+						ConnectionInviterPeer.this.performTellerLoop(portTellerSocket);
 					} finally {
 						portTellerSocket.close();
-						ConnectionInviter.this.portTellerThread = null;
+						ConnectionInviterPeer.this.portTellerThread = null;
 					}
 				}
 			});
@@ -482,9 +482,9 @@ public class ConnectionInviter implements Peer {
 			@Override
 			public void run() {
 				try {
-					ConnectionInviter.this.performCommunicationLoop();
+					ConnectionInviterPeer.this.performCommunicationLoop();
 				} finally {
-					ConnectionInviter.this.communicationThread = null;
+					ConnectionInviterPeer.this.communicationThread = null;
 				}
 			}
 		});

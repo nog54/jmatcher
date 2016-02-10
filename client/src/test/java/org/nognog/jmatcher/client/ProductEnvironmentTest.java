@@ -38,7 +38,7 @@ public class ProductEnvironmentTest {
 		final String jmatcherHost = "nog-jserver1.servehttp.com"; //$NON-NLS-1$
 		final String inviterName = "Darjeeling"; //$NON-NLS-1$
 		final String connectorName = "EarlGrey"; //$NON-NLS-1$
-		try (final ConnectionInviter inviter = new ConnectionInviter(inviterName, jmatcherHost)) {
+		try (final ConnectionInviterPeer inviter = new ConnectionInviterPeer(inviterName, jmatcherHost)) {
 			final Integer entryKey = inviter.startInvitation();
 			System.out.println("Product Environment test : invite with " + entryKey); //$NON-NLS-1$
 			final Connector connector = new Connector(connectorName, jmatcherHost);
@@ -78,7 +78,7 @@ public class ProductEnvironmentTest {
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void testSendMessageFromConnectorToConnectionInviter(final ConnectorPeer connectorPeer, final ConnectionInviter connectionInviter) {
+	private void testSendMessageFromConnectorToConnectionInviter(final ConnectorPeer connectorPeer, final ConnectionInviterPeer connectionInviter) {
 		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
 		final String messageFromConnector1 = "from connector1"; //$NON-NLS-1$
 		assertThat(connectorPeer.sendMessage(messageFromConnector1), is(true));
@@ -95,7 +95,7 @@ public class ProductEnvironmentTest {
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviter connectionInviter, final ConnectorPeer connectorPeer) {
+	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviterPeer connectionInviter, final ConnectorPeer connectorPeer) {
 		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
 		final String messageFromConnectionInviter1 = "from connectionInviter1"; //$NON-NLS-1$
 		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter1, connectorHost), is(true));

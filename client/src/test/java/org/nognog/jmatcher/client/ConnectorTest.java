@@ -74,7 +74,7 @@ public class ConnectorTest {
 	@SuppressWarnings({ "boxing" })
 	private void doTestSendAndReceiveMessage(JMatcherDaemon daemon, String connectionInviterName, String connectorName, int portTellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (final ConnectionInviter connectionInviter = new ConnectionInviter(connectionInviterName, jmatcherHost)) {
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(connectionInviterName, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(portTellerPort);
 			final Integer entryKey = connectionInviter.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
@@ -116,7 +116,7 @@ public class ConnectorTest {
 	}
 
 	@SuppressWarnings({ "boxing", "static-method" })
-	private void testSendMessageFromConnectorToConnectionInviter(final ConnectorPeer connectorPeer, final ConnectionInviter connectionInviter) {
+	private void testSendMessageFromConnectorToConnectionInviter(final ConnectorPeer connectorPeer, final ConnectionInviterPeer connectionInviter) {
 		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
 		final String messageFromConnector1 = "from connector1"; //$NON-NLS-1$
 		assertThat(connectorPeer.sendMessage(messageFromConnector1), is(true));
@@ -133,7 +133,7 @@ public class ConnectorTest {
 	}
 
 	@SuppressWarnings({ "boxing", "static-method" })
-	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviter connectionInviter, final ConnectorPeer connectorPeer) {
+	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviterPeer connectionInviter, final ConnectorPeer connectorPeer) {
 		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
 		final String messageFromConnectionInviter1 = "from connectionInviter1"; //$NON-NLS-1$
 		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter1, connectorHost), is(true));
@@ -175,7 +175,7 @@ public class ConnectorTest {
 	private void doTestConnect(JMatcherDaemon daemon, int portTellerPort) throws IOException {
 		final String inviterName = "Assam"; //$NON-NLS-1$
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
-		try (final ConnectionInviter connectionInviter = new ConnectionInviter(inviterName, jmatcherHost)) {
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(inviterName, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(portTellerPort);
 			final Integer entryKey = connectionInviter.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
