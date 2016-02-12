@@ -38,12 +38,12 @@ public interface Peer extends Closeable {
 	/**
 	 * @param message
 	 * @param hosts
-	 * @return true if succeed in sending
+	 * @return sent hosts
 	 */
 	Host[] sendMessageTo(String message, Host... hosts);
 
 	/**
-	 * @return connecting hosts array
+	 * @return the connecting hosts array
 	 */
 	Set<Host> getConnectingHosts();
 }
