@@ -46,4 +46,9 @@ public interface Peer extends Closeable {
 	 * @return the connecting hosts array
 	 */
 	Set<Host> getConnectingHosts();
+
+	/**
+	 * @return true if it has a connection with anybody
+	 */
+	boolean isOnline();
 }

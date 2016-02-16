@@ -728,4 +728,9 @@ public class ConnectionInviterPeer implements Peer {
 	public void close() {
 		this.closeAllConnections();
 	}
+
+	@Override
+	public boolean isOnline() {
+		return this.udpSocket != null;
+	}
 }

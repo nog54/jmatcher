@@ -373,8 +373,7 @@ public class Connector {
 
 		/**
 		 * Close it without notification to the connecting host. We should
-		 * generally use {@link #close()} instead
-		 * of this method
+		 * generally use {@link #close()} instead of this method
 		 */
 		public void closeWithoutNotificationToConnectingHost() {
 			JMatcherClientUtil.close(this.socket);
@@ -466,5 +465,9 @@ public class Connector {
 			this.name = name;
 		}
 
+		@Override
+		public boolean isOnline() {
+			return !this.socket.isClosed();
+		}
 	}
 }
