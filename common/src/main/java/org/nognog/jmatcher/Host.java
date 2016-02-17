@@ -29,6 +29,11 @@ public class Host implements Serializable {
 	private String address;
 	private int port;
 
+	@SuppressWarnings("unused")
+	private Host() {
+		// for some serialization and deserialization tools
+	}
+
 	/**
 	 * @param address
 	 * @param port
