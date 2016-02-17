@@ -93,6 +93,29 @@ public class Host implements Serializable {
 		this.name = name;
 	}
 
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((this.address == null) ? 0 : this.address.hashCode());
+		result = prime * result + this.port;
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj) {
+			return true;
+		}
+		if (obj == null) {
+			return false;
+		}
+		if (!(obj instanceof Host)) {
+			return false;
+		}
+		return this.equals((Host) obj);
+	}
+
 	/**
 	 * @param host
 	 * @return true if they have same address and port
