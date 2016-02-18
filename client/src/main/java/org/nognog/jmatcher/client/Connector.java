@@ -446,6 +446,7 @@ public class Connector {
 		/**
 		 * @return the socket
 		 */
+		@Override
 		public DatagramSocket getSocket() {
 			return this.socket;
 		}

@@ -15,6 +15,7 @@
 package org.nognog.jmatcher.client;
 
 import java.io.Closeable;
+import java.net.DatagramSocket;
 import java.util.Set;
 
 import org.nognog.jmatcher.Host;
@@ -51,4 +52,12 @@ public interface Peer extends Closeable {
 	 * @return true if it has a connection with anybody
 	 */
 	boolean isOnline();
+
+	/**
+	 * Get using udpSocket. You should be careful when you use this method. It
+	 * might cause unexpected error.
+	 * 
+	 * @return the datargam socket
+	 */
+	DatagramSocket getSocket();
 }

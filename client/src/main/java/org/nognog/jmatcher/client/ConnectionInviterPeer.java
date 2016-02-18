@@ -458,7 +458,7 @@ public class ConnectionInviterPeer implements Peer {
 				if (sentKey.equals(currentEntryKey)) {
 					final Host senderHost = new Host(packet.getAddress().getHostAddress(), packet.getPort());
 					final InetSocketAddress senderSocketAddress = new InetSocketAddress(senderHost.getAddress(), senderHost.getPort());
-					JMatcherClientUtil.sendMessage(portTellerSocket, String.valueOf(this.getUDPSocket().getLocalPort()), senderHost);
+					JMatcherClientUtil.sendMessage(portTellerSocket, String.valueOf(this.getSocket().getLocalPort()), senderHost);
 					this.requestingHosts.add(senderHost);
 					this.socketAddressCache.put(senderHost, senderSocketAddress);
 				}
@@ -720,7 +720,8 @@ public class ConnectionInviterPeer implements Peer {
 	 * 
 	 * @return udpSocket
 	 */
-	public DatagramSocket getUDPSocket() {
+	@Override
+	public DatagramSocket getSocket() {
 		return this.udpSocket;
 	}
 
