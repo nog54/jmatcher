@@ -26,6 +26,20 @@ import org.nognog.jmatcher.Host;
 public interface Peer extends Closeable {
 
 	/**
+	 * Set new buffSize. Note that the minimum size of buffSize might be
+	 * configured by each implementation so you mightn't set your preferred
+	 * buffSize.
+	 * 
+	 * @param buffSize
+	 */
+	void setReceiveBuffSize(int buffSize);
+
+	/**
+	 * @return size of receive buffer
+	 */
+	int getReceiveBuffSize();
+
+	/**
 	 * @return received message
 	 */
 	ReceivedMessage receiveMessage();

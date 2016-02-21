@@ -65,7 +65,7 @@ public class ConnectionInviterPeer implements Peer {
 	private ObjectInputStream ois;
 	private ObjectOutputStream oos;
 	private DatagramSocket udpSocket;
-	private int udpReceiveBuffSize = defaultBuffSize;
+	private int receiveBuffSize = defaultBuffSize;
 
 	private ReceivedMessageBuffer receivedMessageBuffer;
 
@@ -230,11 +230,21 @@ public class ConnectionInviterPeer implements Peer {
 		// overridden when configure the option of udp-socket
 	}
 
+	@Override
+	public int getReceiveBuffSize() {
+		return this.receiveBuffSize;
+	}
+
 	/**
-	 * @return the udpReceiveBuffSize
+	 * Set receiveBuffSize, but the min value is restricted by
+	 * {@link JMatcherClientMessage#buffSizeToReceiveSerializedMessage}}
+	 * 
+	 * @param receiveBuffSize
+	 *            the udpReceiveBuffSize to set
 	 */
-	public int getUDPReceiveBuffSize() {
-		return this.udpReceiveBuffSize;
+	@Override
+	public void setReceiveBuffSize(int receiveBuffSize) {
+		this.receiveBuffSize = Math.max(receiveBuffSize, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
 	}
 
 	/**
@@ -249,17 +259,6 @@ public class ConnectionInviterPeer implements Peer {
 	 */
 	public boolean isCommunicating() {
 		return this.communicationThread != null || this.portTellerThread != null;
-	}
-
-	/**
-	 * set UDPReceiveBuffSize, but the min value is restricted by
-	 * {@link JMatcherClientMessage#buffSizeToReceiveSerializedMessage}}
-	 * 
-	 * @param udpReceiveBuffSize
-	 *            the udpReceiveBuffSize to set
-	 */
-	public void setUDPReceiveBuffSize(int udpReceiveBuffSize) {
-		this.udpReceiveBuffSize = Math.max(udpReceiveBuffSize, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
 	}
 
 	/**
@@ -451,7 +450,7 @@ public class ConnectionInviterPeer implements Peer {
 	protected void performTellerLoop(final DatagramSocket portTellerSocket) {
 		while (this.isInviting()) {
 			try {
-				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(portTellerSocket, this.udpReceiveBuffSize);
+				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(portTellerSocket, this.receiveBuffSize);
 				final String message = JMatcherClientUtil.getMessageFrom(packet);
 				final Integer sentKey = Integer.valueOf(message);
 				final Integer currentEntryKey = this.getCurrentEntryKey();
@@ -560,7 +559,7 @@ public class ConnectionInviterPeer implements Peer {
 	private void receivePacketAndHandle() throws IOException {
 		final DatagramPacket packet;
 		try {
-			packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, this.udpReceiveBuffSize);
+			packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, this.receiveBuffSize);
 		} catch (SocketTimeoutException e) {
 			return;
 		}

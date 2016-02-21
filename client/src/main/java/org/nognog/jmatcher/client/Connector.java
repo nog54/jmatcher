@@ -49,7 +49,7 @@ public class Connector {
 	private int receiveBuffSize = defaultBuffSize;
 
 	private static final int defaultRetryCount = 2;
-	private static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
+	private static final int defaultBuffSize = JMatcherClientMessage.buffSizeToReceiveSerializedMessage;
 	private static final int defaultUdpSocketTimeoutMillSec = 4000;
 	private static final int maxCountOfReceivePacketsAtOneTime = 10;
 
@@ -449,6 +449,16 @@ public class Connector {
 		@Override
 		public DatagramSocket getSocket() {
 			return this.socket;
+		}
+
+		@Override
+		public void setReceiveBuffSize(int buffSize) {
+			this.receiveBuffSize = Math.max(buffSize, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
+		}
+
+		@Override
+		public int getReceiveBuffSize() {
+			return this.receiveBuffSize;
 		}
 
 		/**
