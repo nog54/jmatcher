@@ -72,7 +72,7 @@ public class ConnectionInviterPeer implements Peer {
 	// these sets are designed to be
 	// requestingHosts ∩ connectingHosts = Φ.
 	private CopyOnWriteArraySet<Host> requestingHosts;
-	private Set<Host> connectingHosts;
+	private CopyOnWriteArraySet<Host> connectingHosts;
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
 
 	private Set<ConnectionInviterPeerObserver> observers;
@@ -85,8 +85,6 @@ public class ConnectionInviterPeer implements Peer {
 	/**
 	 * @param name
 	 * @param jmatcherServer
-	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
 	 */
 	public ConnectionInviterPeer(String name, String jmatcherServer) {
 		this(name, jmatcherServer, JMatcher.PORT);
@@ -96,8 +94,6 @@ public class ConnectionInviterPeer implements Peer {
 	 * @param name
 	 * @param jmatcherServer
 	 * @param port
-	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
 	 */
 	public ConnectionInviterPeer(String name, String jmatcherServer, int port) {
 		// it contains validation of the name
@@ -105,7 +101,7 @@ public class ConnectionInviterPeer implements Peer {
 		this.jmatcherServer = jmatcherServer;
 		this.jmatcherServerPort = port;
 		this.requestingHosts = new CopyOnWriteArraySet<>();
-		this.connectingHosts = new HashSet<>();
+		this.connectingHosts = new CopyOnWriteArraySet<>();
 		this.socketAddressCache = new ConcurrentHashMap<>();
 		this.observers = new HashSet<>();
 		this.receivedMessageBuffer = new ReceivedMessageBuffer();
@@ -285,7 +281,7 @@ public class ConnectionInviterPeer implements Peer {
 	 * @return entry key number, or null is returned if it has been started or
 	 *         failed to get entry key from the server
 	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
+	 *             thrown if an I/O error occurs
 	 */
 	public Integer startInvitation() throws IOException {
 		if (this.isCommunicating()) {
@@ -389,16 +385,16 @@ public class ConnectionInviterPeer implements Peer {
 
 	private void closeUDPCommunication() {
 		if (this.udpSocket != null) {
-			for (Host connectingHost : this.connectingHosts) {
+			for (Host closeTargetHost : this.connectingHosts) {
 				try {
-					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCEL, this.name, connectingHost);
+					JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCEL, this.name, closeTargetHost);
 				} catch (IOException e) {
 					// ignore
 				}
 			}
+			JMatcherClientUtil.close(this.udpSocket);
+			this.udpSocket = null;
 		}
-		JMatcherClientUtil.close(this.udpSocket);
-		this.udpSocket = null;
 	}
 
 	private void waitForCommunicationThread() {
@@ -673,11 +669,6 @@ public class ConnectionInviterPeer implements Peer {
 		}
 	}
 
-	/**
-	 * @param message
-	 * @param hosts
-	 * @return true if succeed in sending
-	 */
 	@Override
 	public Host[] sendMessageTo(String message, Host... hosts) {
 		if (!this.isCommunicating()) {

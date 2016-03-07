@@ -56,8 +56,6 @@ public class Connector {
 	/**
 	 * @param name
 	 * @param host
-	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
 	 */
 	public Connector(String name, String host) {
 		this(name, host, JMatcher.PORT);
@@ -67,8 +65,6 @@ public class Connector {
 	 * @param name
 	 * @param host
 	 * @param port
-	 * @throws IOException
-	 *             It's thrown if failed to connect to the server
 	 */
 	public Connector(String name, String host, int port) {
 		this.setName(name);
@@ -183,9 +179,10 @@ public class Connector {
 
 	/**
 	 * @param key
-	 * @return true if success
+	 * @return a peer which has connection to another peer that the key is
+	 *         corresponding with, or null is returned if failed to connect
 	 * @throws IOException
-	 *             thrown if failed to communicate with other
+	 *             thrown if an I/O error occurs
 	 */
 	@SuppressWarnings("resource")
 	public ConnectorPeer connect(int key) throws IOException {
@@ -412,7 +409,7 @@ public class Connector {
 		/**
 		 * @param message
 		 * @return true if succeed in sending
-		 * @throws IOException
+		 * @throws IOException thrown if an I/O error occurs
 		 */
 		public boolean sendMessage(String message) {
 			if (message == null || this.socket.isClosed()) {
