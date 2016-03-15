@@ -17,15 +17,17 @@ package org.nognog.jmatcher.client;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.Logger;
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.SpecialHostAddress;
@@ -41,6 +43,8 @@ import org.nognog.jmatcher.udp.response.ConnectionResponse;
 public class Connector {
 
 	private String name;
+
+	private Logger logger;
 
 	private String jmatcherServer;
 	private int jmatcherServerPort;
@@ -89,6 +93,21 @@ public class Connector {
 			throw new IllegalArgumentException(message);
 		}
 		this.name = name;
+	}
+
+	/**
+	 * @return the logger
+	 */
+	public Logger getLogger() {
+		return this.logger;
+	}
+
+	/**
+	 * @param logger
+	 *            the logger to set
+	 */
+	public void setLogger(Logger logger) {
+		this.logger = logger;
 	}
 
 	/**
@@ -187,32 +206,41 @@ public class Connector {
 	@SuppressWarnings("resource")
 	public ConnectorPeer connect(int key) throws IOException {
 		final DatagramSocket socket = new DatagramSocket();
+		this.setupUDPSocket(socket);
+		this.log(Level.INFO, "start to try to connect to ", Integer.valueOf(key)); //$NON-NLS-1$
 		try {
 			final ConnectorPeer peer = this.tryToConnect(key, socket);
 			if (peer == null) {
 				JMatcherClientUtil.close(socket);
 				return null;
 			}
+			this.log(Level.INFO, "succeeded in connecting to ", Integer.valueOf(key)); //$NON-NLS-1$
 			return peer;
 		} catch (Exception e) {
 			JMatcherClientUtil.close(socket);
+			this.log(Level.ERROR, new StringBuilder("falied to connect to ").append(key).toString(), e); //$NON-NLS-1$
 			throw e;
 		}
 	}
 
 	private ConnectorPeer tryToConnect(int key, DatagramSocket socket) throws IOException {
-		this.setupUDPSocket(socket);
 		Host connectionTargetHost = this.getTargetHostFromServer(key, socket);
 		if (connectionTargetHost == null) {
+			this.log(Level.INFO, "could not find ", Integer.valueOf(key)); //$NON-NLS-1$
 			return null;
 		}
 		if (SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.equals(connectionTargetHost.getAddress())) {
+			this.log(Level.INFO, "target host(", Integer.valueOf(key), ") is on my internal network"); //$NON-NLS-1$ //$NON-NLS-2$
 			connectionTargetHost = this.findInternalNetworkEntryHost(key, socket);
 			if (connectionTargetHost == null) {
+				this.log(Level.INFO, "could not find ", Integer.valueOf(key), " on internal network"); //$NON-NLS-1$ //$NON-NLS-2$
 				return null;
 			}
 		}
+		this.log(Level.DEBUG, "target host is ", connectionTargetHost); //$NON-NLS-1$
+
 		for (int i = 0; i < this.retryCount; i++) {
+			this.log(Level.DEBUG, "count of trying to connect : ", Integer.valueOf(i)); //$NON-NLS-1$
 			final ConnectorPeer peer = this.tryToConnectTo(connectionTargetHost, socket);
 			if (peer != null) {
 				return peer;
@@ -225,10 +253,13 @@ public class Connector {
 		for (int i = 0; i < this.retryCount; i++) {
 			try {
 				JMatcherClientUtil.sendUDPRequest(socket, new ConnectionRequest(Integer.valueOf(key)), new InetSocketAddress(this.jmatcherServer, this.jmatcherServerPort));
+				this.log(Level.DEBUG, "sent connection request to ", this.jmatcherServer, ":", Integer.valueOf(this.jmatcherServerPort)); //$NON-NLS-1$ //$NON-NLS-2$
 				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(socket, this.receiveBuffSize);
+				this.log(Level.DEBUG, "received connection response"); //$NON-NLS-1$
 				return response.getHost();
 			} catch (SocketTimeoutException | ClassCastException | IllegalArgumentException e) {
 				// failed
+				this.log(Level.DEBUG, "caught exception while getting target host from server", e); //$NON-NLS-1$
 			}
 		}
 		return null;
@@ -236,33 +267,47 @@ public class Connector {
 
 	private Host findInternalNetworkEntryHost(int key, DatagramSocket socket) {
 		try {
-			for (final InterfaceAddress networkInterface : NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getInterfaceAddresses()) {
-				try {
-					final InetSocketAddress broadcastSocketAddress = new InetSocketAddress(networkInterface.getBroadcast(), this.internalNetworkPortTellerPort);
-					JMatcherClientUtil.sendMessage(socket, String.valueOf(key), broadcastSocketAddress);
-					final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(socket, this.receiveBuffSize);
-					final int toldPort = Integer.valueOf(JMatcherClientUtil.getMessageFrom(packet)).intValue();
-					final String address = packet.getAddress().getHostAddress();
-					return new Host(address, toldPort);
-				} catch (NumberFormatException | IOException e) {
-					// when toldPort was invalid or the broadcast didn't reach
+			final Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+			while (interfaces.hasMoreElements()) {
+				final NetworkInterface networkInterface = interfaces.nextElement();
+				for (final InterfaceAddress interfaceAddress : networkInterface.getInterfaceAddresses()) {
+					try {
+						if (interfaceAddress.getBroadcast() == null) {
+							continue;
+						}
+						final InetSocketAddress broadcastSocketAddress = new InetSocketAddress(interfaceAddress.getBroadcast(), this.internalNetworkPortTellerPort);
+						JMatcherClientUtil.sendMessage(socket, String.valueOf(key), broadcastSocketAddress);
+						this.log(Level.DEBUG, "sent connection request to broadcast address ", broadcastSocketAddress); //$NON-NLS-1$
+						final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(socket, this.receiveBuffSize);
+						final String hostAddress = packet.getAddress().getHostAddress();
+						this.log(Level.DEBUG, "received packet from  ", hostAddress); //$NON-NLS-1$
+						final int toldPort = Integer.valueOf(JMatcherClientUtil.getMessageFrom(packet)).intValue();
+						this.log(Level.DEBUG, "told port is ", Integer.valueOf(toldPort)); //$NON-NLS-1$
+						return new Host(hostAddress, toldPort);
+					} catch (NumberFormatException | IOException e) {
+						// when toldPort was invalid or the broadcast didn't
+						// reach
+						this.log(Level.DEBUG, "caught exception while searching on ", interfaceAddress, e); //$NON-NLS-1$
+					}
 				}
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			this.log(Level.DEBUG, "caught exception while finding entry host being on the internal network on the same network", e); //$NON-NLS-1$
 		}
 		return null;
 	}
 
 	private ConnectorPeer tryToConnectTo(final Host connectionTargetHost, DatagramSocket socket) throws IOException {
 		JMatcherClientUtil.sendJMatcherClientMessage(socket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, connectionTargetHost);
+		this.log(Level.DEBUG, "sent connection request to ", connectionTargetHost, "to do hole-panching"); //$NON-NLS-1$ //$NON-NLS-2$
 		try {
 			for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-				final JMatcherClientMessage receivedJMatcherMessage = tryToReceiveJMatcherMessageFrom(connectionTargetHost, socket, this.receiveBuffSize);
+				final JMatcherClientMessage receivedJMatcherMessage = this.tryToReceiveJMatcherMessageFrom(connectionTargetHost, socket);
 				if (receivedJMatcherMessage == null) {
 					continue;
 				}
 				final JMatcherClientMessageType messageType = receivedJMatcherMessage.getType();
+				this.log(Level.DEBUG, "received ", messageType); //$NON-NLS-1$
 				if (messageType == JMatcherClientMessageType.CONNECT_REQUEST) {
 					JMatcherClientUtil.sendJMatcherClientMessage(socket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, connectionTargetHost);
 					continue;
@@ -281,17 +326,39 @@ public class Connector {
 		return null;
 	}
 
-	static JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host, DatagramSocket socket, int receiveBuffSize) throws SocketTimeoutException, IOException {
-		final DatagramPacket packet = tryToReceiveUDPPacketFrom(host, socket, receiveBuffSize);
-		return JMatcherClientUtil.getJMatcherMessageFrom(packet);
+	private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host, DatagramSocket socket) throws SocketTimeoutException, IOException {
+		final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(host, socket);
+		final JMatcherClientMessage result = JMatcherClientUtil.getJMatcherMessageFrom(packet);
+		this.log(Level.DEBUG, "receive ", result, " from ", host); //$NON-NLS-1$ //$NON-NLS-2$
+		return result;
 	}
 
-	static DatagramPacket tryToReceiveUDPPacketFrom(Host host, DatagramSocket socket, int receiveBuffSize) throws SocketTimeoutException, IOException {
-		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(socket, receiveBuffSize);
+	private DatagramPacket tryToReceiveUDPPacketFrom(Host host, DatagramSocket socket) throws SocketTimeoutException, IOException {
+		final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(socket, this.receiveBuffSize);
+		this.log(Level.DEBUG, "received packet from", packet.getSocketAddress()); //$NON-NLS-1$
 		if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
 			return null;
 		}
+		this.log(Level.DEBUG, "accept packet which came from", packet.getAddress(), ":", Integer.valueOf(packet.getPort())); //$NON-NLS-1$ //$NON-NLS-2$
 		return packet;
+	}
+
+	private void log(Level level, Object... msgs) {
+		if (this.logger == null) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder();
+		for (Object msg : msgs) {
+			sb.append(msg);
+		}
+		this.logger.log(level, sb.toString());
+	}
+
+	private void log(Level level, String msg, Throwable t) {
+		if (this.logger == null) {
+			return;
+		}
+		this.logger.log(level, msg, t);
 	}
 
 	/**
@@ -325,7 +392,7 @@ public class Connector {
 					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
 					try {
 						for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-							final JMatcherClientMessage receivedMessage = tryToReceiveJMatcherMessageFrom(this.connectingHost, this.socket, this.receiveBuffSize);
+							final JMatcherClientMessage receivedMessage = this.tryToReceiveJMatcherMessageFrom(this.connectingHost);
 							if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
 								return;
 							}
@@ -348,7 +415,7 @@ public class Connector {
 			}
 			try {
 				for (int i = 0; i < this.retryCount; i++) {
-					final DatagramPacket packet = Connector.tryToReceiveUDPPacketFrom(this.connectingHost, this.socket, this.receiveBuffSize);
+					final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(this.connectingHost);
 					if (packet == null) {
 						continue;
 					}
@@ -366,6 +433,19 @@ public class Connector {
 			} catch (IOException e) {
 				return null;
 			}
+		}
+
+		private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host) throws SocketTimeoutException, IOException {
+			final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(host);
+			return JMatcherClientUtil.getJMatcherMessageFrom(packet);
+		}
+
+		private DatagramPacket tryToReceiveUDPPacketFrom(Host host) throws SocketTimeoutException, IOException {
+			final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
+			if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
+				return null;
+			}
+			return packet;
 		}
 
 		/**
@@ -409,7 +489,8 @@ public class Connector {
 		/**
 		 * @param message
 		 * @return true if succeed in sending
-		 * @throws IOException thrown if an I/O error occurs
+		 * @throws IOException
+		 *             thrown if an I/O error occurs
 		 */
 		public boolean sendMessage(String message) {
 			if (message == null || this.socket.isClosed()) {

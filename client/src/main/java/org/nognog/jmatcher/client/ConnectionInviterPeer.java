@@ -32,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.Logger;
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.SpecialHostAddress;
@@ -76,6 +78,8 @@ public class ConnectionInviterPeer implements Peer {
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
 
 	private Set<ConnectionInviterPeerObserver> observers;
+
+	private Logger logger;
 
 	static final int defalutRetryCount = 2;
 	static final int defaultBuffSize = Math.max(256, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
@@ -218,12 +222,12 @@ public class ConnectionInviterPeer implements Peer {
 
 	@SuppressWarnings("unused")
 	protected void setupTCPSocket(final Socket tcpSocket) throws SocketException {
-		// overridden when configure the option of tcp-socket
+		// overridden when configure the option of this tcp-socket
 	}
 
 	@SuppressWarnings("unused")
 	protected void setupUDPSocket(final DatagramSocket udpSocket) throws SocketException {
-		// overridden when configure the option of udp-socket
+		// overridden when configure the option this udp-socket
 	}
 
 	@Override
@@ -241,6 +245,21 @@ public class ConnectionInviterPeer implements Peer {
 	@Override
 	public void setReceiveBuffSize(int receiveBuffSize) {
 		this.receiveBuffSize = Math.max(receiveBuffSize, JMatcherClientMessage.buffSizeToReceiveSerializedMessage);
+	}
+
+	/**
+	 * @return the logger
+	 */
+	public Logger getLogger() {
+		return this.logger;
+	}
+
+	/**
+	 * @param logger
+	 *            the logger to set
+	 */
+	public void setLogger(Logger logger) {
+		this.logger = logger;
 	}
 
 	/**
@@ -284,7 +303,9 @@ public class ConnectionInviterPeer implements Peer {
 	 *             thrown if an I/O error occurs
 	 */
 	public Integer startInvitation() throws IOException {
+		this.log(Level.INFO, "starting a invitation."); //$NON-NLS-1$
 		if (this.isCommunicating()) {
+			this.log(Level.INFO, "it is already communicating."); //$NON-NLS-1$
 			return null;
 		}
 		for (int i = 0; i < this.retryCount; i++) {
@@ -305,12 +326,14 @@ public class ConnectionInviterPeer implements Peer {
 					}
 					this.startCommunicationThread();
 					this.lastEntryKey = keyNumber;
+					this.log(Level.INFO, "succeeded in starting the invitation"); //$NON-NLS-1$
 					return keyNumber;
 				}
 			} catch (IOException | ClassNotFoundException | ClassCastException e) {
+				this.log(Level.ERROR, "failed to start the invitation", e); //$NON-NLS-1$
 				// failed
 			} catch (Exception e) {
-				System.err.println("unexpected expection occured"); //$NON-NLS-1$
+				this.log(Level.ERROR, "unexpected expection occured", e); //$NON-NLS-1$
 				e.printStackTrace();
 			}
 		}
@@ -319,10 +342,12 @@ public class ConnectionInviterPeer implements Peer {
 	}
 
 	private void setupTCPConnection() throws UnknownHostException, IOException, SocketException {
+		this.log(Level.INFO, "doing setup a TCP connection to make entry to jmatcher-server"); //$NON-NLS-1$
 		this.tcpSocket = new Socket(this.jmatcherServer, this.jmatcherServerPort);
 		this.setupTCPSocket(this.tcpSocket);
 		this.oos = new ObjectOutputStream(this.tcpSocket.getOutputStream());
 		this.ois = new ObjectInputStream(this.tcpSocket.getInputStream());
+		this.log(Level.INFO, "finised doing setup a TCP connection"); //$NON-NLS-1$
 	}
 
 	private Integer makePreEntry() throws IOException, ClassNotFoundException {
@@ -333,13 +358,20 @@ public class ConnectionInviterPeer implements Peer {
 			return null;
 		}
 		final Integer keyNumber = ((PreEntryResponse) entryResponse).getKeyNumber();
+		if (keyNumber != null) {
+			this.log(Level.INFO, "succeeded in pre-entry, key = ", keyNumber); //$NON-NLS-1$
+		} else {
+			this.log(Level.INFO, "failed to do pre-entry. there is a possibility that the server is currently full."); //$NON-NLS-1$
+		}
 		return keyNumber;
 	}
 
 	private void setupUDPConnection() throws SocketException {
+		this.log(Level.INFO, "doing setup a UDP connection to communicate with other peer"); //$NON-NLS-1$
 		this.udpSocket = new DatagramSocket();
 		this.udpSocket.setSoTimeout(defaultUdpSocketTimeoutMillSec);
 		this.setupUDPSocket(this.udpSocket);
+		this.log(Level.INFO, "finished doing setup a UDP connection"); //$NON-NLS-1$
 	}
 
 	private boolean enableEntry(final Integer keyNumber) throws IOException, ClassNotFoundException {
@@ -360,8 +392,10 @@ public class ConnectionInviterPeer implements Peer {
 	}
 
 	private void closeAllConnections() {
+		this.log(Level.DEBUG, "closing all connections"); //$NON-NLS-1$
 		this.closeTCPCommunication();
 		this.closeUDPCommunication();
+		this.log(Level.DEBUG, "clearing the information of hosts"); //$NON-NLS-1$
 		this.requestingHosts.clear();
 		final int prevSizeOfConnectingHosts = this.connectingHosts.size();
 		this.connectingHosts.clear();
@@ -370,20 +404,25 @@ public class ConnectionInviterPeer implements Peer {
 		if (prevSizeOfConnectingHosts != 0) {
 			this.notifyObservers(UpdateEvent.CLEAR, null);
 		}
+		this.log(Level.DEBUG, "cleared the information of hosts"); //$NON-NLS-1$
 		this.waitForCommunicationThread();
 		this.waitForPortTellerThread();
+		this.log(Level.DEBUG, "closed all connections"); //$NON-NLS-1$
 	}
 
 	private void closeTCPCommunication() {
+		this.log(Level.DEBUG, "closing the tcp connection"); //$NON-NLS-1$
 		JMatcherClientUtil.close(this.ois);
 		JMatcherClientUtil.close(this.oos);
 		JMatcherClientUtil.close(this.tcpSocket);
 		this.ois = null;
 		this.oos = null;
 		this.tcpSocket = null;
+		this.log(Level.DEBUG, "closed the tcp connection"); //$NON-NLS-1$
 	}
 
 	private void closeUDPCommunication() {
+		this.log(Level.DEBUG, "closing the udp connection"); //$NON-NLS-1$
 		if (this.udpSocket != null) {
 			for (Host closeTargetHost : this.connectingHosts) {
 				try {
@@ -395,6 +434,7 @@ public class ConnectionInviterPeer implements Peer {
 			JMatcherClientUtil.close(this.udpSocket);
 			this.udpSocket = null;
 		}
+		this.log(Level.DEBUG, "closed the udp connection"); //$NON-NLS-1$
 	}
 
 	private void waitForCommunicationThread() {
@@ -417,7 +457,9 @@ public class ConnectionInviterPeer implements Peer {
 	 * request to stop invitation
 	 */
 	public void stopInvitation() {
+		this.log(Level.INFO, "stopping the invitation"); //$NON-NLS-1$
 		this.closeTCPCommunication();
+		this.log(Level.INFO, "stopped the invitation"); //$NON-NLS-1$
 	}
 
 	private void startPortTellerThread() {
@@ -433,11 +475,14 @@ public class ConnectionInviterPeer implements Peer {
 					} finally {
 						portTellerSocket.close();
 						ConnectionInviterPeer.this.portTellerThread = null;
+						ConnectionInviterPeer.this.log(Level.INFO, "end port-teller thread for LAN"); //$NON-NLS-1$
 					}
 				}
 			});
+			this.log(Level.INFO, "start port-teller thread for LAN"); //$NON-NLS-1$
 			this.portTellerThread.start();
 		} catch (SocketException e) {
+			this.log(Level.ERROR, "failed to start port-teller thread"); //$NON-NLS-1$
 			e.printStackTrace();
 			return;
 		}
@@ -448,12 +493,14 @@ public class ConnectionInviterPeer implements Peer {
 			try {
 				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(portTellerSocket, this.receiveBuffSize);
 				final String message = JMatcherClientUtil.getMessageFrom(packet);
+				this.log(Level.INFO, "port-teller thread : received ", message, " from ", packet.getSocketAddress()); //$NON-NLS-1$ //$NON-NLS-2$
 				final Integer sentKey = Integer.valueOf(message);
 				final Integer currentEntryKey = this.getCurrentEntryKey();
 				if (sentKey.equals(currentEntryKey)) {
+					JMatcherClientUtil.sendMessage(portTellerSocket, String.valueOf(this.getSocket().getLocalPort()), packet.getSocketAddress());
+					this.log(Level.INFO, "port-teller thread : sent ", Integer.valueOf(this.getSocket().getLocalPort()), " to ", packet.getSocketAddress()); //$NON-NLS-1$ //$NON-NLS-2$
 					final Host senderHost = new Host(packet.getAddress().getHostAddress(), packet.getPort());
 					final InetSocketAddress senderSocketAddress = new InetSocketAddress(senderHost.getAddress(), senderHost.getPort());
-					JMatcherClientUtil.sendMessage(portTellerSocket, String.valueOf(this.getSocket().getLocalPort()), senderHost);
 					this.requestingHosts.add(senderHost);
 					this.socketAddressCache.put(senderHost, senderSocketAddress);
 				}
@@ -483,6 +530,7 @@ public class ConnectionInviterPeer implements Peer {
 				}
 			}
 		});
+		this.log(Level.INFO, "start communication thread"); //$NON-NLS-1$
 		this.communicationThread.start();
 	}
 
@@ -506,8 +554,7 @@ public class ConnectionInviterPeer implements Peer {
 				} catch (IOException e) {
 					throw e;
 				} catch (Exception e) {
-					// unexpected exception occured
-					e.printStackTrace();
+					this.log(Level.ERROR, "communication thread : unexpected exception occured", e); //$NON-NLS-1$
 				}
 			}
 		} catch (IOException e) {
@@ -516,6 +563,7 @@ public class ConnectionInviterPeer implements Peer {
 	}
 
 	private void updateRequestingHosts() throws IOException {
+		this.log(Level.DEBUG, "communication thread : updating requesting hosts"); //$NON-NLS-1$
 		this.oos.writeObject(PlainTCPRequest.CHECK_CONNECTION_REQUEST);
 		this.oos.flush();
 		try {
@@ -535,6 +583,8 @@ public class ConnectionInviterPeer implements Peer {
 		} catch (ClassNotFoundException e) {
 			throw new RuntimeException("unexpected fatal expection occured", e); //$NON-NLS-1$
 		}
+		this.log(Level.DEBUG, "communication thread : updated requesting hosts"); //$NON-NLS-1$
+		this.log(Level.DEBUG, this.requestingHosts);
 	}
 
 	@SuppressWarnings("static-method")
@@ -545,6 +595,7 @@ public class ConnectionInviterPeer implements Peer {
 	private void sendHolePunchingMessage() throws IOException {
 		for (Host requestingHost : this.requestingHosts) {
 			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CONNECT_REQUEST, this.name, requestingHost);
+			this.log(Level.DEBUG, "communication thread : sent hole-panching message to ", requestingHost); //$NON-NLS-1$
 		}
 	}
 
@@ -559,6 +610,7 @@ public class ConnectionInviterPeer implements Peer {
 		} catch (SocketTimeoutException e) {
 			return;
 		}
+		this.log(Level.DEBUG, "communication thread : received message from ", packet.getSocketAddress()); //$NON-NLS-1$
 		final Host from = this.specifyHost(packet);
 		if (from == null) {
 			return;
@@ -568,40 +620,55 @@ public class ConnectionInviterPeer implements Peer {
 		if (jmatcherClientMessage == null) {
 			if (this.connectingHosts.contains(from)) {
 				this.storeMessage(packet, from);
+				this.log(Level.DEBUG, "communication thread : stored the message which is from ", packet.getSocketAddress()); //$NON-NLS-1$
 			}
 			return;
 		}
 		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.CANCEL) {
+			this.log(Level.DEBUG, "communication thread : the message which is from ", packet.getSocketAddress(), " is connection-cancel request"); //$NON-NLS-1$ //$NON-NLS-2$
 			this.handleCancelMessage(from);
 			return;
 		}
 		if (jmatcherClientMessage.getType() == JMatcherClientMessageType.GOT_CONNECT_REQUEST) {
+			this.log(Level.DEBUG, "communication thread : the message which is from ", packet.getSocketAddress(), " means ", packet.getSocketAddress(), " caught the connection request from me"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 			this.handleGotConnectRequestMessage(from, jmatcherClientMessage);
 			return;
 		}
 	}
 
 	private void handleCancelMessage(final Host from) throws IOException {
-		this.requestingHosts.remove(from);
-		this.socketAddressCache.remove(from);
+		this.log(Level.INFO, "communication thread : cancelling connection to ", from); //$NON-NLS-1$
+		boolean notAlreadyCancelled = false;
+		notAlreadyCancelled |= this.requestingHosts.remove(from);
+		notAlreadyCancelled |= this.socketAddressCache.remove(from) == null;
 		if (this.connectingHosts.remove(from)) {
+			notAlreadyCancelled = true;
 			this.receivedMessageBuffer.clear(from);
 			this.notifyObservers(UpdateEvent.REMOVE, from);
 		}
+
 		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
+		if (notAlreadyCancelled) {
+			this.log(Level.INFO, "communication thread : cancelled connection to ", from); //$NON-NLS-1$
+		} else {
+			this.log(Level.INFO, "communication thread : connection to ", from, " has already been cancelled"); //$NON-NLS-1$ //$NON-NLS-2$
+		}
 	}
 
 	private void handleGotConnectRequestMessage(final Host from, final JMatcherClientMessage jmatcherClientMessage) throws IOException {
 		if (this.connectingHosts.size() >= this.maxSizeOfConnectingHosts) {
+			this.log(Level.INFO, "communication thread : could not accept connection request from ", from, " because the list of the connecting hosts is full"); //$NON-NLS-1$ //$NON-NLS-2$
 			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.ENTRY_CLIENT_IS_FULL, this.name, from);
 			return;
 		}
 		if (this.connectingHosts.add(from)) {
+			this.log(Level.INFO, "communication thread : ", from, " is added into the list of the connecting hosts"); //$NON-NLS-1$ //$NON-NLS-2$
 			from.setName(jmatcherClientMessage.getSenderName());
 			this.requestingHosts.remove(from);
 			this.notifyObservers(UpdateEvent.ADD, from);
 		}
 		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
+		this.log(Level.INFO, "communication thread : sent ", from, " notice that the connection request is accepted"); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	private void storeMessage(final DatagramPacket packet, final Host from) {
@@ -723,5 +790,33 @@ public class ConnectionInviterPeer implements Peer {
 	@Override
 	public boolean isOnline() {
 		return this.udpSocket != null;
+	}
+
+	protected void log(Level level, Object... msgs) {
+		if (this.logger == null) {
+			return;
+		}
+		StringBuilder sb = new StringBuilder();
+		for (Object msg : msgs) {
+			sb.append(msg);
+		}
+		this.logger.log(level, sb.toString());
+	}
+
+	protected void log(Level level, String msg, Throwable t) {
+		if (this.logger == null) {
+			return;
+		}
+		this.logger.log(level, msg, t);
+	}
+
+	/**
+	 * dump
+	 */
+	public void dump() {
+		System.out.print("requestingHosts = "); //$NON-NLS-1$
+		System.out.println(this.requestingHosts);
+		System.out.print("connectingHosts = "); //$NON-NLS-1$
+		System.out.println(this.connectingHosts);
 	}
 }

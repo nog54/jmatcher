@@ -2,6 +2,8 @@ eclipse.project { name = appName + "-server" }
 
 jar {
 	from configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+	exclude "**/log4j2.xml"
+	exclude "**/Log4j-*"
 }
 
 // Deploy to a server

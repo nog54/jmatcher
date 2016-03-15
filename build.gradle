@@ -72,8 +72,11 @@ project(":server") {
 
 project(":client") {
 	archivesBaseName = appName + '-client'
+	ext{ log4jVersion = '2.4.1' }
 	dependencies {
 		compile project(":common")
+		compile "org.apache.logging.log4j:log4j-api:$log4jVersion"
+		compile "org.apache.logging.log4j:log4j-core:$log4jVersion"
 		testCompile project(":server")
 		testCompile "com.googlecode.jmockit:jmockit:1.4"
 		testCompile "junit:junit:+"
