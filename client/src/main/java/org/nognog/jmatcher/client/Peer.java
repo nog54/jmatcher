@@ -40,13 +40,14 @@ public interface Peer extends Closeable {
 	int getReceiveBuffSize();
 
 	/**
-	 * @return received message
+	 * @return received message, or null if timeout occured or catched other
+	 *         SocketException
 	 */
 	ReceivedMessage receiveMessage();
 
 	/**
 	 * @param host
-	 * @return message from the argument
+	 * @return message from the host. or null if timeout occured or catched other SocketException
 	 */
 	String receiveMessageFrom(Host host);
 
