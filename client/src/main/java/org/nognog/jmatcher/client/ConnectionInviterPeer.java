@@ -68,6 +68,7 @@ public class ConnectionInviterPeer implements Peer {
 	private ObjectOutputStream oos;
 	private DatagramSocket udpSocket;
 	private int receiveBuffSize = defaultBuffSize;
+	private int udpSoTimeoutCache;
 
 	private ReceivedMessageBuffer receivedMessageBuffer;
 
@@ -326,6 +327,7 @@ public class ConnectionInviterPeer implements Peer {
 					}
 					this.startCommunicationThread();
 					this.lastEntryKey = keyNumber;
+					this.udpSoTimeoutCache = this.udpSocket.getSoTimeout();
 					this.log(Level.INFO, "succeeded in starting the invitation"); //$NON-NLS-1$
 					return keyNumber;
 				}
@@ -434,6 +436,7 @@ public class ConnectionInviterPeer implements Peer {
 			JMatcherClientUtil.close(this.udpSocket);
 			this.udpSocket = null;
 		}
+		this.udpSoTimeoutCache = 0;
 		this.log(Level.DEBUG, "closed the udp connection"); //$NON-NLS-1$
 	}
 
@@ -606,7 +609,10 @@ public class ConnectionInviterPeer implements Peer {
 	private void receivePacketAndHandle() throws IOException {
 		final DatagramPacket packet;
 		try {
-			packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, this.receiveBuffSize);
+			synchronized (this.udpSocket) {
+				this.udpSoTimeoutCache = this.udpSocket.getSoTimeout();
+				packet = JMatcherClientUtil.receiveUDPPacket(this.udpSocket, this.receiveBuffSize);
+			}
 		} catch (SocketTimeoutException e) {
 			return;
 		}
@@ -714,8 +720,8 @@ public class ConnectionInviterPeer implements Peer {
 			return null;
 		}
 		try {
-			return this.receivedMessageBuffer.poll(this.udpSocket.getSoTimeout());
-		} catch (SocketException e) {
+			return this.receivedMessageBuffer.poll(this.udpSoTimeoutCache);
+		} catch (Exception e) {
 			return null;
 		}
 	}

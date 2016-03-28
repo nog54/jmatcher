@@ -175,16 +175,16 @@ public class UDPClientRequestHandler implements Runnable {
 	private void waitToMatchConnectionTiming(Integer connectionTargetKeyNumber, boolean useSpecialInternalAddress) throws TimeoutException {
 		final CopyOnWriteArraySet<RequestingConnectionHostHandler> newSet = new CopyOnWriteArraySet<>();
 		synchronized (connectionTargetKeyNumber) {
-			final CopyOnWriteArraySet<RequestingConnectionHostHandler> previousSettedSet = this.waitingForSyncHandlersMap.putIfAbsent(connectionTargetKeyNumber, newSet);
+			final CopyOnWriteArraySet<RequestingConnectionHostHandler> previousSet = this.waitingForSyncHandlersMap.putIfAbsent(connectionTargetKeyNumber, newSet);
 			final Host requestingConnectionHost = this.createClientHostInstance();
 			if (useSpecialInternalAddress) {
 				requestingConnectionHost.setAddress(SpecialHostAddress.ON_INTERNAL_NETWORK_HOST.getAddress());
 			}
 			final RequestingConnectionHostHandler waitingHandler = new RequestingConnectionHostHandler(Thread.currentThread(), requestingConnectionHost);
-			if (previousSettedSet == null) { // in case new set is put
+			if (previousSet == null) { // in case new set is put
 				newSet.add(waitingHandler);
 			} else {
-				previousSettedSet.add(waitingHandler);
+				previousSet.add(waitingHandler);
 			}
 		}
 		try {

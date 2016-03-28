@@ -71,9 +71,6 @@ public class ReceivedMessageBuffer {
 
 	private synchronized boolean addReceivedMessage(final ReceivedMessage receivedMessage) {
 		final Host host = receivedMessage.getSender();
-		if (this.receivedMessageQueue.contains(receivedMessage)) {
-			return false;
-		}
 		if (!this.receivedMessagesMap.containsKey(host)) {
 			this.updateMapsForNewHost(host);
 		}

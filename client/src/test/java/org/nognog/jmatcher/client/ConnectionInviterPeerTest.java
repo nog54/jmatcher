@@ -14,18 +14,22 @@
 
 package org.nognog.jmatcher.client;
 
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThan;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.logging.log4j.LogManager;
 import org.junit.Test;
 import org.nognog.jmatcher.Host;
 import org.nognog.jmatcher.JMatcher;
@@ -43,7 +47,9 @@ import mockit.Verifications;
 public class ConnectionInviterPeerTest {
 
 	/**
-	 * Test method for {@link org.nognog.jmatcher.client.ConnectionInviterPeer#startInvitation()}.
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.ConnectionInviterPeer#startInvitation()}
+	 * .
 	 * 
 	 * @throws Exception
 	 */
@@ -53,7 +59,7 @@ public class ConnectionInviterPeerTest {
 		daemon.init(null);
 		daemon.start();
 		try {
-			this.doStartInvitation(daemon, JMatcher.PORT - 1);
+			this.doTestStartInvitation(daemon, JMatcher.PORT - 1);
 		} finally {
 			daemon.stop();
 			daemon.destroy();
@@ -65,7 +71,7 @@ public class ConnectionInviterPeerTest {
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	private void doStartInvitation(JMatcherDaemon daemon, int portTellerPort) throws IOException, InterruptedException {
+	private void doTestStartInvitation(JMatcherDaemon daemon, int portTellerPort) throws IOException, InterruptedException {
 		final String wrongJmatcherHost = "rokalfost"; //$NON-NLS-1$
 		final int wrongPort = 80;
 		try (final ConnectionInviterPeer inviter = new ConnectionInviterPeer(null, wrongJmatcherHost, wrongPort)) {
@@ -131,7 +137,8 @@ public class ConnectionInviterPeerTest {
 			final Integer entryKey6 = inviter.startInvitation();
 			assertThat(entryKey6, is(not(nullValue())));
 			inviter.stopCommunication();
-			// ---- start invitation after stopCommunication without stopInvitation ----
+			// ---- start invitation after stopCommunication without
+			// stopInvitation ----
 			final Integer entryKey7 = inviter.startInvitation();
 			assertThat(entryKey7, is(not(nullValue())));
 			inviter.stopCommunication();
@@ -335,5 +342,135 @@ public class ConnectionInviterPeerTest {
 				times = expectedTimes;
 			}
 		};
+	}
+
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.ConnectionInviterPeer#receiveMessage()}
+	 * .
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testReceiveMessageSpeed() throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestReceiveMessageSpeed(daemon, JMatcher.PORT - 1);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	private void doTestReceiveMessageSpeed(JMatcherDaemon daemon, int portTellerPort) throws IOException {
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
+			connectionInviter.setPortTellerPort(portTellerPort);
+			connectionInviter.setLogger(LogManager.getLogger(this.getClass()));
+			final Integer entryKey = connectionInviter.startInvitation();
+			this.testReceiveMessageSpeed(portTellerPort, jmatcherHost, connectionInviter, entryKey);
+		}
+	}
+
+	private void testReceiveMessageSpeed(int portTellerPort, final String jmatcherHost, ConnectionInviterPeer connectionInviter, final Integer entryKey) throws IOException, SocketException {
+		final int numberOFConnectorPeer = 10;
+		final ConnectorPeer[] connectorPeers = this.createConnectorPeers(portTellerPort, jmatcherHost, entryKey, numberOFConnectorPeer);
+		final String message = "java"; //$NON-NLS-1$
+		final int delayTime = 500;
+		if (delayTime > connectionInviter.getSocket().getSoTimeout() / 2) {
+			System.err.println("delay time should be more small to ensure that this test runs correctly"); //$NON-NLS-1$
+		}
+		for (final ConnectorPeer connectorPeer : connectorPeers) {
+			new Thread() {
+				@Override
+				public void run() {
+					try {
+						Thread.sleep(delayTime);
+						connectorPeer.sendMessage(message);
+					} catch (InterruptedException e) {
+						System.err.println("unexpected interrupt occured"); //$NON-NLS-1$
+					}
+				}
+			}.start();
+		}
+		final long startTime = System.currentTimeMillis();
+		for (int i = 0; i < numberOFConnectorPeer; i++) {
+			final ReceivedMessage receivedMessage = connectionInviter.receiveMessage();
+			assertThat(receivedMessage, is(not(nullValue())));
+			assertThat(receivedMessage.getMessage(), is(message));
+		}
+		final long endTime = System.currentTimeMillis();
+		final long expectedTime = delayTime + 200; // 適当
+		assertThat(endTime - startTime, is(lessThan(expectedTime)));
+		for (final ConnectorPeer connectorPeer : connectorPeers) {
+			connectorPeer.close();
+		}
+	}
+
+	private ConnectorPeer[] createConnectorPeers(int portTellerPort, final String jmatcherHost, final Integer entryKey, final int numberOFConnectorPeer) throws IOException {
+		final ConnectorPeer[] connectorPeers = new ConnectorPeer[numberOFConnectorPeer];
+		for (int i = 0; i < connectorPeers.length; i++) {
+			final Connector connector = new Connector("tea" + i, jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			connectorPeers[i] = connector.connect(entryKey);
+		}
+		return connectorPeers;
+	}
+
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.ConnectionInviterPeer#receiveMessage()}
+	 * .
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testReceiveMessageTimeout() throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestReceiveMessageTimeout(daemon, JMatcher.PORT - 1);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	private void doTestReceiveMessageTimeout(JMatcherDaemon daemon, int portTellerPort) throws IOException {
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
+			connectionInviter.setPortTellerPort(portTellerPort);
+			connectionInviter.setLogger(LogManager.getLogger(this.getClass()));
+			final Integer entryKey = connectionInviter.startInvitation();
+			assertThat(entryKey, is(not(nullValue())));
+			this.testReceiveMessageTimeout(connectionInviter);
+		}
+	}
+
+	private void testReceiveMessageTimeout(ConnectionInviterPeer connectionInviter) throws IOException, SocketException {
+		final int originalSoTimeout = connectionInviter.getSocket().getSoTimeout();
+		final long startTime1 = System.currentTimeMillis();
+		final ReceivedMessage message1 = connectionInviter.receiveMessage();
+		final long endTime1 = System.currentTimeMillis();
+		assertThat(message1, is(nullValue()));
+		assertThat(endTime1 - startTime1, is(greaterThanOrEqualTo((long) originalSoTimeout)));
+
+		final int newSoTimeout = originalSoTimeout * 2;
+		connectionInviter.getSocket().setSoTimeout(newSoTimeout);
+		try {
+			// sleep to apply the newSoTimeout
+			Thread.sleep(originalSoTimeout);
+		} catch (InterruptedException e) {
+			fail();
+		}
+
+		final long startTime2 = System.currentTimeMillis();
+		final ReceivedMessage message2 = connectionInviter.receiveMessage();
+		final long endTime2 = System.currentTimeMillis();
+		assertThat(message2, is(nullValue()));
+		assertThat(endTime2 - startTime2, is(greaterThanOrEqualTo((long) newSoTimeout)));
 	}
 }
