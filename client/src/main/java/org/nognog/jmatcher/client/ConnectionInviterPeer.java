@@ -78,7 +78,7 @@ public class ConnectionInviterPeer implements Peer {
 	private CopyOnWriteArraySet<Host> connectingHosts;
 	private ConcurrentMap<Host, InetSocketAddress> socketAddressCache;
 
-	private Set<ConnectionInviterPeerObserver> observers;
+	private Set<PeerObserver> observers;
 
 	private Logger logger;
 
@@ -280,19 +280,21 @@ public class ConnectionInviterPeer implements Peer {
 	/**
 	 * @param observer
 	 */
-	public void addObserver(ConnectionInviterPeerObserver observer) {
+	@Override
+	public void addObserver(PeerObserver observer) {
 		this.observers.add(observer);
 	}
 
 	/**
 	 * @param observer
 	 */
-	public void removeObserver(ConnectionInviterPeerObserver observer) {
+	@Override
+	public void removeObserver(PeerObserver observer) {
 		this.observers.remove(observer);
 	}
 
 	private void notifyObservers(UpdateEvent event, Host target) {
-		for (ConnectionInviterPeerObserver observer : this.observers) {
+		for (PeerObserver observer : this.observers) {
 			observer.updateConnectingHosts(new HashSet<>(this.connectingHosts), event, target);
 		}
 	}

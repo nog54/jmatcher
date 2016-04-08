@@ -285,7 +285,7 @@ public class ConnectionInviterPeerTest {
 	 * @throws Exception
 	 */
 	@Test
-	public final void testNotifyObservers(@Mocked ConnectionInviterPeerObserver observer) throws Exception {
+	public final void testNotifyObservers(@Mocked PeerObserver observer) throws Exception {
 		final JMatcherDaemon daemon = new JMatcherDaemon();
 		daemon.init(null);
 		daemon.start();
@@ -301,7 +301,7 @@ public class ConnectionInviterPeerTest {
 	 * @param daemon
 	 * @throws IOException
 	 */
-	private void doTestObservers(JMatcherDaemon daemon, final ConnectionInviterPeerObserver observer, int tellerPort) throws Exception {
+	private void doTestObservers(JMatcherDaemon daemon, final PeerObserver observer, int tellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
 		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(tellerPort);
@@ -335,7 +335,7 @@ public class ConnectionInviterPeerTest {
 	}
 
 	@SuppressWarnings({ "unused", "unchecked" })
-	private void verifyCountOfNotificationOfObserver(final ConnectionInviterPeerObserver observer, final int expectedTimes) {
+	private void verifyCountOfNotificationOfObserver(final PeerObserver observer, final int expectedTimes) {
 		new Verifications() {
 			{
 				observer.updateConnectingHosts((Set<Host>) any, (UpdateEvent) any, (Host) any);

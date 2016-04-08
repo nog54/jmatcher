@@ -21,7 +21,7 @@ import org.nognog.jmatcher.Host;
 /**
  * @author goshi 2016/01/12
  */
-public interface ConnectionInviterPeerObserver {
+public interface PeerObserver {
 	/**
 	 * update connecting hosts
 	 * 

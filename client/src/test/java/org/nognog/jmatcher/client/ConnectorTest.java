@@ -21,6 +21,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.util.Set;
 
 import org.junit.Test;
 import org.nognog.jmatcher.Host;
@@ -28,14 +29,24 @@ import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.client.Connector.ConnectorPeer;
 import org.nognog.jmatcher.server.JMatcherDaemon;
 
+import mockit.Mocked;
+import mockit.Verifications;
+
 /**
  * @author goshi 2015/12/29
  */
 public class ConnectorTest {
 
 	/**
-	 * Test method for {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#receiveMessage()} and {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#receiveMessageFrom(Host)} and
-	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#sendMessage(String)} and {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#sendMessageTo(String, Host...)}.
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#receiveMessage()}
+	 * and
+	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#receiveMessageFrom(Host)}
+	 * and
+	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#sendMessage(String)}
+	 * and
+	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#sendMessageTo(String, Host...)}
+	 * .
 	 * 
 	 * @throws Exception
 	 */
@@ -150,7 +161,8 @@ public class ConnectorTest {
 	}
 
 	/**
-	 * Test method for {@link org.nognog.jmatcher.client.Connector#connect(int)}.
+	 * Test method for {@link org.nognog.jmatcher.client.Connector#connect(int)}
+	 * .
 	 * 
 	 * @throws Exception
 	 */
@@ -215,4 +227,128 @@ public class ConnectorTest {
 
 	}
 
+	/**
+	 * Test method for
+	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#addObserver(PeerObserver)}
+	 * and
+	 * {@link org.nognog.jmatcher.client.Connector.ConnectorPeer#removeObserver(PeerObserver)}
+	 * .
+	 * 
+	 * @param observer
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testObserver(@Mocked PeerObserver observer) throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestObserver(daemon, JMatcher.PORT - 1, observer);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	/**
+	 * @param daemon
+	 * @param i
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
+	@SuppressWarnings({ "static-method" })
+	private void doTestObserver(JMatcherDaemon daemon, int portTellerPort, final PeerObserver mockObserver) throws IOException, InterruptedException {
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("Mandheling", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			final Connector connector = new Connector("mocha", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final ConnectorPeer connectorPeer = connector.connect(entryKey.intValue())) {
+				verifyCountOfNotificationOfObserver(mockObserver, 0);
+				connectionInviter.close();
+				Thread.sleep(1000);
+				verifyCountOfNotificationOfObserver(mockObserver, 0);
+				connectorPeer.receiveMessage();
+				verifyCountOfNotificationOfObserver(mockObserver, 0);
+			}
+		}
+		// Almost the same so TODO extract common process
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("Mandheling", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			final Connector connector = new Connector("mocha", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final ConnectorPeer connectorPeer = connector.connect(entryKey.intValue())) {
+				connectorPeer.addObserver(mockObserver);
+				verifyCountOfNotificationOfObserver(mockObserver, 0);
+				connectionInviter.close();
+				Thread.sleep(1000);
+				verifyCountOfNotificationOfObserver(mockObserver, 0);
+				connectorPeer.receiveMessage();
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
+			}
+		}
+
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("Mandheling", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			final Connector connector = new Connector("mocha", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final ConnectorPeer connectorPeer = connector.connect(entryKey.intValue())) {
+				connectorPeer.addObserver(mockObserver);
+				connectorPeer.removeObserver(mockObserver);
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
+				connectionInviter.close();
+				Thread.sleep(1000);
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
+				connectorPeer.receiveMessage();
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
+			}
+		}
+
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("Mandheling", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			final Connector connector = new Connector("mocha", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final ConnectorPeer connectorPeer = connector.connect(entryKey.intValue())) {
+				connectorPeer.removeObserver(mockObserver);
+				connectorPeer.addObserver(mockObserver);
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
+				connectionInviter.close();
+				Thread.sleep(1000);
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
+				connectorPeer.receiveMessage();
+				verifyCountOfNotificationOfObserver(mockObserver, 2);
+			}
+		}
+
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("Mandheling", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			final Connector connector = new Connector("mocha", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final ConnectorPeer connectorPeer = connector.connect(entryKey.intValue())) {
+				connectorPeer.removeObserver(mockObserver);
+				verifyCountOfNotificationOfObserver(mockObserver, 2);
+				connectionInviter.close();
+				Thread.sleep(1000);
+				verifyCountOfNotificationOfObserver(mockObserver, 2);
+				connectorPeer.receiveMessage();
+				verifyCountOfNotificationOfObserver(mockObserver, 2);
+			}
+		}
+	}
+
+	@SuppressWarnings({ "unused", "unchecked" })
+	private static void verifyCountOfNotificationOfObserver(final PeerObserver mockObserver, final int expectedCount) {
+		new Verifications() {
+			{
+				mockObserver.updateConnectingHosts((Set<Host>) any, UpdateEvent.REMOVE, (Host) any);
+				times = expectedCount;
+			}
+		};
+	}
 }

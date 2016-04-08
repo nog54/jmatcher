@@ -257,7 +257,7 @@ public class Connector {
 				final ConnectionResponse response = (ConnectionResponse) JMatcherClientUtil.receiveUDPResponse(socket, this.receiveBuffSize);
 				this.log(Level.DEBUG, "received connection response"); //$NON-NLS-1$
 				return response.getHost();
-			} catch (SocketTimeoutException | ClassCastException | IllegalArgumentException e) {
+			} catch (SocketTimeoutException | ClassCastException | IllegalArgumentException | NullPointerException e) {
 				// failed
 				this.log(Level.DEBUG, "caught exception while getting target host from server", e); //$NON-NLS-1$
 			}
@@ -367,9 +367,10 @@ public class Connector {
 	public static class ConnectorPeer implements Peer {
 		private String name;
 		private final DatagramSocket socket;
-		private final Host connectingHost;
+		private Host connectingHost;
 		private int receiveBuffSize;
 		private int retryCount;
+		private Set<PeerObserver> observers;
 
 		ConnectorPeer(String name, DatagramSocket socket, Host connectingHost, int receiveBuffSize, int retryCount) {
 			if (socket == null || connectingHost == null) {
@@ -380,11 +381,16 @@ public class Connector {
 			this.connectingHost = connectingHost;
 			this.receiveBuffSize = receiveBuffSize;
 			this.retryCount = retryCount;
+			this.observers = new HashSet<>();
 		}
 
 		@Override
 		public void close() {
 			if (this.socket.isClosed()) {
+				return;
+			}
+			if (this.connectingHost == null) {
+				this.closeWithoutNotificationToConnectingHost();
 				return;
 			}
 			try {
@@ -424,7 +430,9 @@ public class Connector {
 					if (jmatcherClientMessage == null) {
 						return new ReceivedMessage(this.connectingHost, receivedMessage);
 					} else if (JMatcherClientMessageType.CANCEL == jmatcherClientMessage.getType()) {
-						this.closeWithoutNotificationToConnectingHost();
+						final Host removedHost = this.connectingHost;
+						this.connectingHost = null;
+						this.notifyObservers(UpdateEvent.REMOVE, removedHost);
 						return null;
 					}
 				}
@@ -446,6 +454,12 @@ public class Connector {
 				return null;
 			}
 			return packet;
+		}
+
+		private void notifyObservers(UpdateEvent event, Host target) {
+			for (PeerObserver observer : this.observers) {
+				observer.updateConnectingHosts(new HashSet<Host>(), event, target);
+			}
 		}
 
 		/**
@@ -557,6 +571,22 @@ public class Connector {
 		@Override
 		public boolean isOnline() {
 			return !this.socket.isClosed();
+		}
+
+		/**
+		 * @param observer
+		 */
+		@Override
+		public void addObserver(PeerObserver observer) {
+			this.observers.add(observer);
+		}
+
+		/**
+		 * @param observer
+		 */
+		@Override
+		public void removeObserver(PeerObserver observer) {
+			this.observers.remove(observer);
 		}
 	}
 }

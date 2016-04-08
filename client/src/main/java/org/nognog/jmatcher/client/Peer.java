@@ -75,4 +75,14 @@ public interface Peer extends Closeable {
 	 * @return the datargam socket
 	 */
 	DatagramSocket getSocket();
+	
+	/**
+	 * @param observer
+	 */
+	void addObserver(PeerObserver observer);
+	
+	/**
+	 * @param observer
+	 */
+	void removeObserver(PeerObserver observer);
 }
