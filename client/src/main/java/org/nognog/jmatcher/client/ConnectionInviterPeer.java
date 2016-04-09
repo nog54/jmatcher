@@ -401,13 +401,10 @@ public class ConnectionInviterPeer implements Peer {
 		this.closeUDPCommunication();
 		this.log(Level.DEBUG, "clearing the information of hosts"); //$NON-NLS-1$
 		this.requestingHosts.clear();
-		final int prevSizeOfConnectingHosts = this.connectingHosts.size();
 		this.connectingHosts.clear();
 		this.socketAddressCache.clear();
 		this.receivedMessageBuffer.clear();
-		if (prevSizeOfConnectingHosts != 0) {
-			this.notifyObservers(UpdateEvent.CLEAR, null);
-		}
+		this.notifyObservers(UpdateEvent.CLEAR, null);
 		this.log(Level.DEBUG, "cleared the information of hosts"); //$NON-NLS-1$
 		this.waitForCommunicationThread();
 		this.waitForPortTellerThread();

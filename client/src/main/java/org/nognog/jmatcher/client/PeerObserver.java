@@ -23,7 +23,8 @@ import org.nognog.jmatcher.Host;
  */
 public interface PeerObserver {
 	/**
-	 * update connecting hosts
+	 * Update connecting hosts. {@link UpdateEvent#CLEAR} sometimes means the
+	 * observerd peer was closed.
 	 * 
 	 * @param connectingHosts
 	 * @param event

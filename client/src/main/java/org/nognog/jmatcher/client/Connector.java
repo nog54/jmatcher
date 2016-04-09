@@ -410,7 +410,8 @@ public class Connector {
 			} catch (IOException e) {
 				return;
 			} finally {
-				JMatcherClientUtil.close(this.socket);
+				this.closeWithoutNotificationToConnectingHost();
+				this.notifyObservers(UpdateEvent.CLEAR, null);
 			}
 		}
 
