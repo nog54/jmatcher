@@ -126,6 +126,9 @@ public class Host implements Serializable {
 	 * @return true if they have same address and port
 	 */
 	public boolean equals(Host host) {
+		if (host == null) {
+			return false;
+		}
 		if (this.address == null) {
 			return false;
 		}

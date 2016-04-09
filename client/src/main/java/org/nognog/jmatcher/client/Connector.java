@@ -416,7 +416,7 @@ public class Connector {
 
 		@Override
 		public ReceivedMessage receiveMessage() {
-			if (this.socket.isClosed()) {
+			if (this.socket.isClosed() || this.connectingHost == null) {
 				return null;
 			}
 			try {
@@ -507,7 +507,7 @@ public class Connector {
 		 *             thrown if an I/O error occurs
 		 */
 		public boolean sendMessage(String message) {
-			if (message == null || this.socket.isClosed()) {
+			if (message == null || this.socket.isClosed() || this.connectingHost == null) {
 				return false;
 			}
 			try {
@@ -528,7 +528,7 @@ public class Connector {
 		@Override
 		public Set<Host> getConnectingHosts() {
 			final Set<Host> result = new HashSet<>();
-			if (this.socket.isClosed()) {
+			if (this.socket.isClosed() || this.connectingHost == null) {
 				return result;
 			}
 			result.add(this.connectingHost);
