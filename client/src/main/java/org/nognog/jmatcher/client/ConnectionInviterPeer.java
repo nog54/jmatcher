@@ -396,6 +396,9 @@ public class ConnectionInviterPeer implements Peer {
 	}
 
 	private void closeAllConnections() {
+		if (this.tcpSocket == null && this.udpSocket == null) {
+			return;
+		}
 		this.log(Level.DEBUG, "closing all connections"); //$NON-NLS-1$
 		this.closeTCPCommunication();
 		this.closeUDPCommunication();
