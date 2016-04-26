@@ -24,7 +24,7 @@ allprojects {
 	sourceSets.main.resources.srcDirs = ["src/main/resources/"]
 	sourceSets.test.resources.srcDirs = ["src/test/resources/"]
 
-	version = '1.0-SNAPSHOT'
+	version = '1.0'
 	group = 'com.github.nog54'
 	ext{ appName = 'jmatcher' }
 
