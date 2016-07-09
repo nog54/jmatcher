@@ -385,6 +385,23 @@ public class Connector {
 		}
 
 		@Override
+		public void disconnect(Host host) {
+			if (this.connectingHost == null || host != this.connectingHost) {
+				return;
+			}
+			this.sendDisconnectionMessage();
+			this.connectingHost = null;
+			this.notifyObservers(UpdateEvent.REMOVE, host);
+		}
+
+		/**
+		 * Disconnect
+		 */
+		public void disconnect() {
+			this.disconnect(this.connectingHost);
+		}
+
+		@Override
 		public void close() {
 			if (this.socket.isClosed()) {
 				return;
@@ -393,26 +410,39 @@ public class Connector {
 				this.closeWithoutNotificationToConnectingHost();
 				return;
 			}
+			this.sendDisconnectionMessage();
+			this.closeWithoutNotificationToConnectingHost();
+			this.notifyObservers(UpdateEvent.CLEAR, null);
+		}
+
+		/**
+		 * The disconnection message may not reach the target (connecting host).
+		 */
+		private void sendDisconnectionMessage() {
 			try {
 				for (int i = 0; i < this.retryCount; i++) {
-					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
-					try {
-						for (int j = 0; j < maxCountOfReceivePacketsAtOneTime; j++) {
-							final JMatcherClientMessage receivedMessage = this.tryToReceiveJMatcherMessageFrom(this.connectingHost);
-							if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
-								return;
-							}
-						}
-					} catch (SocketTimeoutException e) {
-						// one of the end conditions
+					if (this.tryToSendDisconnectMessage() == true) {
+						break;
 					}
 				}
 			} catch (IOException e) {
 				return;
-			} finally {
-				this.closeWithoutNotificationToConnectingHost();
-				this.notifyObservers(UpdateEvent.CLEAR, null);
 			}
+		}
+
+		private boolean tryToSendDisconnectMessage() throws IOException {
+			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
+			try {
+				for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
+					final JMatcherClientMessage receivedMessage = this.tryToReceiveJMatcherMessageFrom(this.connectingHost);
+					if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
+						return true;
+					}
+				}
+			} catch (SocketTimeoutException e) {
+				// one of the end conditions
+			}
+			return false;
 		}
 
 		@Override

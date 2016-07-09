@@ -303,6 +303,7 @@ public class ConnectionInviterPeerTest {
 	 */
 	private void doTestObservers(JMatcherDaemon daemon, final PeerObserver observer, int tellerPort) throws Exception {
 		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		final int delayTime = 300;
 		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
 			connectionInviter.setPortTellerPort(tellerPort);
 			Integer key = connectionInviter.startInvitation();
@@ -315,10 +316,12 @@ public class ConnectionInviterPeerTest {
 			this.verifyCountOfNotificationOfObserver(observer, 0);
 			connectionInviter.addObserver(observer);
 			try (Peer peer = connector.connect(key)) {
+				Thread.sleep(delayTime);
 				this.verifyCountOfNotificationOfObserver(observer, 1);
 			}
 			this.verifyCountOfNotificationOfObserver(observer, 2);
 			try (Peer peer = connector.connect(key)) {
+				Thread.sleep(delayTime);
 				this.verifyCountOfNotificationOfObserver(observer, 3);
 				connectionInviter.stopInvitation();
 				this.verifyCountOfNotificationOfObserver(observer, 3);
@@ -329,9 +332,14 @@ public class ConnectionInviterPeerTest {
 			}
 			this.verifyCountOfNotificationOfObserver(observer, 4);
 			try (Peer peer = connector.connect(key)) {
+				Thread.sleep(delayTime);
 				this.verifyCountOfNotificationOfObserver(observer, 5);
+				peer.disconnect(peer.getConnectingHosts().toArray(new Host[0])[0]);
+				this.verifyCountOfNotificationOfObserver(observer, 6);
 			}
+			this.verifyCountOfNotificationOfObserver(observer, 6);
 		}
+		this.verifyCountOfNotificationOfObserver(observer, 7);
 	}
 
 	@SuppressWarnings({ "unused", "unchecked" })
@@ -472,5 +480,50 @@ public class ConnectionInviterPeerTest {
 		final long endTime2 = System.currentTimeMillis();
 		assertThat(message2, is(nullValue()));
 		assertThat(endTime2 - startTime2, is(greaterThanOrEqualTo((long) newSoTimeout)));
+	}
+
+	/**
+	 * @param observer
+	 * 
+	 * @throws Exception
+	 */
+	@Test
+	public final void testDisconnect() throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestDisconnect(daemon, JMatcher.PORT - 1);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	private void doTestDisconnect(JMatcherDaemon daemon, int portTellerPort) throws IOException {
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer(null, jmatcherHost)) {
+			connectionInviter.setPortTellerPort(portTellerPort);
+			Integer key = connectionInviter.startInvitation();
+			assertThat(key, is(not(nullValue())));
+			Connector connector = new Connector(null, jmatcherHost);
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (Peer peer = connector.connect(key)) {
+				assertThat(peer.isOnline(), is(true));
+				final Set<Host> connectingHosts = connectionInviter.getConnectingHosts();
+				assertThat(connectingHosts.size(), is(1));
+				connectionInviter.disconnect(connectingHosts.toArray(new Host[0])[0]);
+				assertThat(connectionInviter.getConnectingHosts().size(), is(0));
+				assertThat(connectionInviter.isOnline(), is(true));
+				assertThat(connectionInviter.isInviting(), is(true));
+				assertThat(connectionInviter.isCommunicating(), is(true));
+				assertThat(connectionInviter.getSocket().isClosed(), is(false));
+				assertThat(peer.isOnline(), is(true));
+				assertThat(peer.getConnectingHosts().size(), is(1));
+				peer.receiveMessage();
+				assertThat(peer.isOnline(), is(true));
+				assertThat(peer.getConnectingHosts().size(), is(0));
+			}
+		}
 	}
 }

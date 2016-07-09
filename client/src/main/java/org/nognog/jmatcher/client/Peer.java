@@ -47,7 +47,8 @@ public interface Peer extends Closeable {
 
 	/**
 	 * @param host
-	 * @return message from the host. or null if timeout occured or catched other SocketException
+	 * @return message from the host. or null if timeout occured or catched
+	 *         other SocketException
 	 */
 	String receiveMessageFrom(Host host);
 
@@ -75,14 +76,20 @@ public interface Peer extends Closeable {
 	 * @return the datargam socket
 	 */
 	DatagramSocket getSocket();
-	
+
 	/**
 	 * @param observer
 	 */
 	void addObserver(PeerObserver observer);
-	
+
 	/**
 	 * @param observer
 	 */
 	void removeObserver(PeerObserver observer);
+
+	/**
+	 * @param host
+	 *            the target of disconnection
+	 */
+	void disconnect(Host host);
 }

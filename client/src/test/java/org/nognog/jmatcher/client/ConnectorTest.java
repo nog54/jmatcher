@@ -209,9 +209,9 @@ public class ConnectorTest {
 	}
 
 	@SuppressWarnings({ "static-method" })
-	private void doTestConnectWith(final int entryKey, final String wrongJmatcherHost, int portTellerPort, boolean expected) throws IOException {
+	private void doTestConnectWith(final int entryKey, final String jmatcherHost, int portTellerPort, boolean expected) throws IOException {
 		final String connectorName = "Uva"; //$NON-NLS-1$
-		final Connector requester = new Connector(connectorName, wrongJmatcherHost);
+		final Connector requester = new Connector(connectorName, jmatcherHost);
 		requester.setInternalNetworkPortTellerPort(portTellerPort);
 		if (expected == false) {
 			try (ConnectorPeer connectionRequesterPeer = requester.connect(entryKey)) {
@@ -224,7 +224,6 @@ public class ConnectorTest {
 				assertThat(connectionRequesterPeer.getSocket(), is(not(nullValue())));
 			}
 		}
-
 	}
 
 	/**
@@ -340,6 +339,21 @@ public class ConnectorTest {
 				verifyCountOfNotificationOfObserver(mockObserver, 2);
 			}
 		}
+
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("Mandheling", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			final Connector connector = new Connector("mocha-nee", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (final ConnectorPeer connectorPeer = connector.connect(entryKey.intValue())) {
+				connectorPeer.addObserver(mockObserver);
+				verifyCountOfNotificationOfObserver(mockObserver, 2);
+				connectorPeer.disconnect();
+				verifyCountOfNotificationOfObserver(mockObserver, 3);
+				connectorPeer.close();
+				verifyCountOfNotificationOfObserver(mockObserver, 3);
+			}
+		}
 	}
 
 	@SuppressWarnings({ "unused", "unchecked" })
@@ -350,5 +364,44 @@ public class ConnectorTest {
 				times = expectedCount;
 			}
 		};
+	}
+
+	/**
+	 * @throws Exception
+	 */
+	@Test
+	public final void testDisconnect() throws Exception {
+		final JMatcherDaemon daemon = new JMatcherDaemon();
+		daemon.init(null);
+		daemon.start();
+		try {
+			this.doTestDisconnect(daemon, JMatcher.PORT - 1);
+		} finally {
+			daemon.stop();
+			daemon.destroy();
+		}
+	}
+
+	@SuppressWarnings({ "boxing", "static-method" })
+	private void doTestDisconnect(JMatcherDaemon daemon, int portTellerPort) throws Exception {
+		final String jmatcherHost = "localhost"; //$NON-NLS-1$
+		try (final ConnectionInviterPeer connectionInviter = new ConnectionInviterPeer("hot-cocoa", jmatcherHost)) { //$NON-NLS-1$
+			connectionInviter.setPortTellerPort(portTellerPort);
+			final Integer entryKey = connectionInviter.startInvitation();
+			assertThat(entryKey, is(not(nullValue())));
+			final Connector requester = new Connector("ice-cocoa", jmatcherHost); //$NON-NLS-1$
+			requester.setInternalNetworkPortTellerPort(portTellerPort);
+			try (ConnectorPeer connectorPeer = requester.connect(entryKey)) {
+				assertThat(connectorPeer, is(not(nullValue())));
+				assertThat(connectorPeer.isOnline(), is(true));
+				assertThat(connectorPeer.getConnectingHost(), is(not(nullValue())));
+				connectorPeer.disconnect();
+				assertThat(connectorPeer.isOnline(), is(true));
+				assertThat(connectorPeer.getConnectingHost(), is(nullValue()));
+				connectorPeer.close();
+				assertThat(connectorPeer.isOnline(), is(false));
+				assertThat(connectorPeer.getConnectingHost(), is(nullValue()));
+			}
+		}
 	}
 }

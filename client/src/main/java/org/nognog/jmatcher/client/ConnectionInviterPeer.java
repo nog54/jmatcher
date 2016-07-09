@@ -387,6 +387,23 @@ public class ConnectionInviterPeer implements Peer {
 		return false;
 	}
 
+	@Override
+	public void disconnect(Host host) {
+		if (this.udpSocket == null || this.connectingHosts.contains(host) == false) {
+			return;
+		}
+		try {
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCEL, this.name, host);
+		} catch (IOException e) {
+			// end
+		}
+		this.socketAddressCache.remove(host);
+		this.requestingHosts.remove(host);
+		this.connectingHosts.remove(host);
+		this.receivedMessageBuffer.clear(host);
+		this.notifyObservers(UpdateEvent.REMOVE, host);
+	}
+
 	/**
 	 * Stop all communication. It should be used when Reinvitation is no longer
 	 * done.
@@ -646,20 +663,23 @@ public class ConnectionInviterPeer implements Peer {
 
 	private void handleCancelMessage(final Host from) throws IOException {
 		this.log(Level.INFO, "communication thread : cancelling connection to ", from); //$NON-NLS-1$
-		boolean notAlreadyCancelled = false;
-		notAlreadyCancelled |= this.requestingHosts.remove(from);
-		notAlreadyCancelled |= this.socketAddressCache.remove(from) == null;
+		boolean alreadyCancelled = true;
+		if(this.requestingHosts.remove(from)){
+			alreadyCancelled = false;
+		}
+		if(this.socketAddressCache.remove(from) != null){
+			alreadyCancelled = false;
+		}
 		if (this.connectingHosts.remove(from)) {
-			notAlreadyCancelled = true;
+			alreadyCancelled = false;
 			this.receivedMessageBuffer.clear(from);
 			this.notifyObservers(UpdateEvent.REMOVE, from);
 		}
-
 		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.CANCELLED, this.name, from);
-		if (notAlreadyCancelled) {
-			this.log(Level.INFO, "communication thread : cancelled connection to ", from); //$NON-NLS-1$
-		} else {
+		if (alreadyCancelled) {
 			this.log(Level.INFO, "communication thread : connection to ", from, " has already been cancelled"); //$NON-NLS-1$ //$NON-NLS-2$
+		} else {
+			this.log(Level.INFO, "communication thread : cancelled connection to ", from); //$NON-NLS-1$
 		}
 	}
 
@@ -673,9 +693,11 @@ public class ConnectionInviterPeer implements Peer {
 			this.log(Level.INFO, "communication thread : ", from, " is added into the list of the connecting hosts"); //$NON-NLS-1$ //$NON-NLS-2$
 			from.setName(jmatcherClientMessage.getSenderName());
 			this.requestingHosts.remove(from);
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
 			this.notifyObservers(UpdateEvent.ADD, from);
+		} else {
+			JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
 		}
-		JMatcherClientUtil.sendJMatcherClientMessage(this.udpSocket, JMatcherClientMessageType.GOT_CONNECT_REQUEST, this.name, from);
 		this.log(Level.INFO, "communication thread : sent ", from, " notice that the connection request is accepted"); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
