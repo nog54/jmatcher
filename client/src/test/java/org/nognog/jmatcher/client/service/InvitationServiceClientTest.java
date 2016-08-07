@@ -120,7 +120,8 @@ public class InvitationServiceClientTest {
 			throws InterruptedException {
 		final Connector connectionRequester = new Connector(name, server);
 		connectionRequester.setInternalNetworkPortTellerPort(portTellerPort);
-		final InvitationServiceClient client = new InvitationServiceClient(connectionRequester, 256);
+		connectionRequester.setReceiveBuffSize(256);
+		final InvitationServiceClient client = new InvitationServiceClient(connectionRequester);
 		// client.setLogger(LogManager.getLogger(InvitationServiceClientTest.class));
 		final SynchronousQueue<Boolean> queue = new SynchronousQueue<>();
 		final EndListener<Peer> listener = new EndListener<Peer>() {
