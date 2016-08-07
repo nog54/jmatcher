@@ -15,6 +15,7 @@
 package org.nognog.jmatcher.client.service;
 
 import org.apache.logging.log4j.Logger;
+import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.client.Connector;
 import org.nognog.jmatcher.client.Connector.ConnectorPeer;
 import org.nognog.jmatcher.client.Peer;
@@ -28,23 +29,29 @@ public class InvitationServiceClient {
 	/**
 	 * @param name
 	 * @param host
-	 * @param receiveBuffSize
-	 * @param version
-	 * @param allowsLowerCompatibleVersion
+	 * @param receiveBuffSize 
 	 */
-	public InvitationServiceClient(String name, String host, int receiveBuffSize) {
-		this(new Connector(name, host), receiveBuffSize);
+	public InvitationServiceClient(String name, String host,int receiveBuffSize) {
+		this(name, host, JMatcher.PORT, receiveBuffSize);
+	}
+
+	/**
+	 * @param name
+	 * @param host
+	 * @param jmatcherServerPort
+	 * @param receiveBuffSize
+	 */
+	public InvitationServiceClient(String name, String host, int jmatcherServerPort, int receiveBuffSize) {
+		this(new Connector(name, host));
+		this.jmatcherConnectionRequester.setJmatcherServerPort(jmatcherServerPort);
+		this.jmatcherConnectionRequester.setReceiveBuffSize(receiveBuffSize);
 	}
 
 	/**
 	 * @param jmatcherConnectionRequester
-	 * @param receiveBuffSize
-	 * @param version
-	 * @param allowsLowerCompatibleVersion
 	 */
-	public InvitationServiceClient(Connector jmatcherConnectionRequester, int receiveBuffSize) {
+	public InvitationServiceClient(Connector jmatcherConnectionRequester) {
 		this.jmatcherConnectionRequester = jmatcherConnectionRequester;
-		this.jmatcherConnectionRequester.setReceiveBuffSize(receiveBuffSize);
 	}
 
 	/**

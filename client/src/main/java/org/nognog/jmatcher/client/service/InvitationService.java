@@ -20,6 +20,7 @@ import java.net.DatagramSocket;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.nognog.jmatcher.JMatcher;
 import org.nognog.jmatcher.client.ConnectionInviterPeer;
 import org.nognog.jmatcher.client.PeerObserver;
 
@@ -39,18 +40,27 @@ public abstract class InvitationService implements PeerObserver, Closeable {
 	 * @param name
 	 * @param jmatcherServer
 	 * @param receiveBuffSize
-	 * @param version
+	 */
+	public InvitationService(String name, String jmatcherServer, int receiveBuffSize) {
+		this(name, jmatcherServer, JMatcher.PORT, receiveBuffSize);
+	}
+	
+	/**
+	 * @param name
+	 * @param jmatcherServer
+	 * @param jmatcherServerPort 
+	 * @param receiveBuffSize
 	 */
 	@SuppressWarnings("resource")
-	public InvitationService(String name, String jmatcherServer, int receiveBuffSize) {
+	public InvitationService(String name, String jmatcherServer, int jmatcherServerPort, int receiveBuffSize) {
 		this(new ConnectionInviterPeer(name, jmatcherServer));
 		this.connectionInviter.setReceiveBuffSize(receiveBuffSize);
+		this.connectionInviter.setJMatcherServerPort(jmatcherServerPort);
 	}
+
 
 	/**
 	 * @param connectionInviter
-	 * @param receiveBuffSize
-	 * @param version
 	 */
 	public InvitationService(ConnectionInviterPeer connectionInviter) {
 		if (connectionInviter == null) {
