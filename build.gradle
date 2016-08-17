@@ -83,3 +83,15 @@ project(":client") {
 		testCompile "org.exparity:hamcrest-date:1.0.1"
 	}
 }
+
+project(":client-utils") {
+	archivesBaseName = appName + '-client-utils'
+	dependencies {
+		compile project(":client")
+		compile "commons-codec:commons-codec:1.10"
+		testCompile project(":server")
+		testCompile "com.googlecode.jmockit:jmockit:1.4"
+		testCompile "junit:junit:+"
+		testCompile "org.exparity:hamcrest-date:1.0.1"
+	}
+}
