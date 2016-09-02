@@ -664,10 +664,10 @@ public class ConnectionInviterPeer implements Peer {
 	private void handleCancelMessage(final Host from) throws IOException {
 		this.log(Level.INFO, "communication thread : cancelling connection to ", from); //$NON-NLS-1$
 		boolean alreadyCancelled = true;
-		if(this.requestingHosts.remove(from)){
+		if (this.requestingHosts.remove(from)) {
 			alreadyCancelled = false;
 		}
-		if(this.socketAddressCache.remove(from) != null){
+		if (this.socketAddressCache.remove(from) != null) {
 			alreadyCancelled = false;
 		}
 		if (this.connectingHosts.remove(from)) {
@@ -755,15 +755,11 @@ public class ConnectionInviterPeer implements Peer {
 		if (!this.isCommunicating()) {
 			return null;
 		}
-		try {
-			final ReceivedMessage receivedMessage = this.receivedMessageBuffer.poll(host, this.udpSocket.getSoTimeout());
-			if (receivedMessage == null) {
-				return null;
-			}
-			return receivedMessage.getMessage();
-		} catch (SocketException e) {
+		final ReceivedMessage receivedMessage = this.receivedMessageBuffer.poll(host, this.udpSoTimeoutCache);
+		if (receivedMessage == null) {
 			return null;
 		}
+		return receivedMessage.getMessage();
 	}
 
 	@Override

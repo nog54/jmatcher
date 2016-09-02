@@ -150,6 +150,9 @@ public class ReceivedMessageBuffer {
 	 * @return the oldest ReceivedMessage for the host
 	 */
 	public ReceivedMessage poll(Host host, long timeout) {
+		if (host == null || host.getAddress() == null || host.getPort() < 0 || 65535 < host.getPort()) {
+			return null;
+		}
 		final ReceivedMessage resultOfFirstTry = this.tryToPoll(host);
 		if (resultOfFirstTry != null) {
 			return resultOfFirstTry;
@@ -210,5 +213,13 @@ public class ReceivedMessageBuffer {
 				this.receivedMessageQueue.remove(message);
 			}
 		}
+	}
+
+	/**
+	 * Dump the queues
+	 */
+	public synchronized void dump() {
+		System.out.println(this.receivedMessagesMap);
+		System.out.println(this.receivedMessageQueue);
 	}
 }

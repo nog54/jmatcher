@@ -372,6 +372,11 @@ public class Connector {
 		private int retryCount;
 		private Set<PeerObserver> observers;
 
+		private Thread communicationThread;
+		private ReceivedMessageBuffer receivedMessageBuffer;
+
+		private volatile boolean isDisconnecting;
+
 		ConnectorPeer(String name, DatagramSocket socket, Host connectingHost, int receiveBuffSize, int retryCount) {
 			if (socket == null || connectingHost == null) {
 				throw new IllegalArgumentException();
@@ -382,6 +387,76 @@ public class Connector {
 			this.receiveBuffSize = receiveBuffSize;
 			this.retryCount = retryCount;
 			this.observers = new HashSet<>();
+			this.receivedMessageBuffer = new ReceivedMessageBuffer();
+			this.communicationThread = new Thread() {
+				@Override
+				public void run() {
+					ConnectorPeer.this.performCommunicationLoop();
+				}
+			};
+			this.communicationThread.start();
+		}
+
+		/**
+		 * 
+		 */
+		public void performCommunicationLoop() {
+			try {
+				while (this.connectingHost != null && this.socket.isClosed() == false) {
+					try {
+						this.receivePacketAndHandle();
+					} catch (IOException e) {
+						throw e;
+					} catch (Exception e) {
+						// it should be logged
+					}
+				}
+			} catch (IOException e) {
+				// IOException is mainly caused by closing socket
+			}
+		}
+
+		private void receivePacketAndHandle() throws IOException {
+			final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(this.connectingHost);
+			if (packet == null) {
+				return;
+			}
+			final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
+			final JMatcherClientMessage jmatcherClientMessage = tryTransformToJMatcherClientMessage(receivedMessage);
+			if (jmatcherClientMessage == null) {
+				this.receivedMessageBuffer.store(this.connectingHost, receivedMessage);
+			} else if (JMatcherClientMessageType.CANCEL == jmatcherClientMessage.getType()) {
+				final Host removedHost = this.connectingHost;
+				this.connectingHost = null;
+				this.notifyObservers(UpdateEvent.REMOVE, removedHost);
+			} else if (JMatcherClientMessageType.CANCELLED == jmatcherClientMessage.getType()) {
+				synchronized (this) {
+					this.notifyAll();
+				}
+				this.isDisconnecting = false;
+			}
+		}
+
+		private DatagramPacket tryToReceiveUDPPacketFrom(Host host) throws IOException {
+			try {
+				final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
+				if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
+					return null;
+				}
+				return packet;
+			} catch (SocketTimeoutException e) {
+				return null;
+			}
+		}
+
+		private static JMatcherClientMessage tryTransformToJMatcherClientMessage(final String receiveMessage) {
+			return JMatcherClientMessage.deserialize(receiveMessage);
+		}
+
+		private void notifyObservers(UpdateEvent event, Host target) {
+			for (PeerObserver observer : this.observers) {
+				observer.updateConnectingHosts(new HashSet<Host>(), event, target);
+			}
 		}
 
 		@Override
@@ -411,86 +486,9 @@ public class Connector {
 				return;
 			}
 			this.sendDisconnectionMessage();
+			this.connectingHost = null;
 			this.closeWithoutNotificationToConnectingHost();
 			this.notifyObservers(UpdateEvent.CLEAR, null);
-		}
-
-		/**
-		 * The disconnection message may not reach the target (connecting host).
-		 */
-		private void sendDisconnectionMessage() {
-			try {
-				for (int i = 0; i < this.retryCount; i++) {
-					if (this.tryToSendDisconnectMessage() == true) {
-						break;
-					}
-				}
-			} catch (IOException e) {
-				return;
-			}
-		}
-
-		private boolean tryToSendDisconnectMessage() throws IOException {
-			JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
-			try {
-				for (int i = 0; i < maxCountOfReceivePacketsAtOneTime; i++) {
-					final JMatcherClientMessage receivedMessage = this.tryToReceiveJMatcherMessageFrom(this.connectingHost);
-					if (receivedMessage != null && receivedMessage.getType() == JMatcherClientMessageType.CANCELLED) {
-						return true;
-					}
-				}
-			} catch (SocketTimeoutException e) {
-				// one of the end conditions
-			}
-			return false;
-		}
-
-		@Override
-		public ReceivedMessage receiveMessage() {
-			if (this.socket.isClosed() || this.connectingHost == null) {
-				return null;
-			}
-			try {
-				for (int i = 0; i < this.retryCount; i++) {
-					final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(this.connectingHost);
-					if (packet == null) {
-						continue;
-					}
-					final String receivedMessage = JMatcherClientUtil.getMessageFrom(packet);
-					final JMatcherClientMessage jmatcherClientMessage = tryTransformToJMatcherClientMessage(receivedMessage);
-					if (jmatcherClientMessage == null) {
-						return new ReceivedMessage(this.connectingHost, receivedMessage);
-					} else if (JMatcherClientMessageType.CANCEL == jmatcherClientMessage.getType()) {
-						final Host removedHost = this.connectingHost;
-						this.connectingHost = null;
-						this.notifyObservers(UpdateEvent.REMOVE, removedHost);
-						return null;
-					}
-				}
-				System.err.println("JMatcherConnectionClient : abnormal state"); //$NON-NLS-1$
-				return null;
-			} catch (IOException e) {
-				return null;
-			}
-		}
-
-		private JMatcherClientMessage tryToReceiveJMatcherMessageFrom(Host host) throws SocketTimeoutException, IOException {
-			final DatagramPacket packet = this.tryToReceiveUDPPacketFrom(host);
-			return JMatcherClientUtil.getJMatcherMessageFrom(packet);
-		}
-
-		private DatagramPacket tryToReceiveUDPPacketFrom(Host host) throws SocketTimeoutException, IOException {
-			final DatagramPacket packet = JMatcherClientUtil.receiveUDPPacket(this.socket, this.receiveBuffSize);
-			if (JMatcherClientUtil.packetCameFrom(host, packet) == false) {
-				return null;
-			}
-			return packet;
-		}
-
-		private void notifyObservers(UpdateEvent event, Host target) {
-			for (PeerObserver observer : this.observers) {
-				observer.updateConnectingHosts(new HashSet<Host>(), event, target);
-			}
 		}
 
 		/**
@@ -501,8 +499,39 @@ public class Connector {
 			JMatcherClientUtil.close(this.socket);
 		}
 
-		private static JMatcherClientMessage tryTransformToJMatcherClientMessage(final String receiveMessage) {
-			return JMatcherClientMessage.deserialize(receiveMessage);
+		/**
+		 * The disconnection message may not reach the target (connecting host).
+		 */
+		private void sendDisconnectionMessage() {
+			try {
+				this.isDisconnecting = true;
+				for (int i = 0; i < this.retryCount; i++) {
+					JMatcherClientUtil.sendJMatcherClientMessage(this.socket, JMatcherClientMessageType.CANCEL, this.name, this.connectingHost);
+					synchronized (this) {
+						this.wait(this.socket.getSoTimeout());
+					}
+					if (this.isDisconnecting == false) {
+						break;
+					}
+				}
+			} catch (Exception e) {
+				// terminate forcely
+			} finally {
+				this.isDisconnecting = false;
+			}
+
+		}
+
+		@Override
+		public ReceivedMessage receiveMessage() {
+			if (this.socket.isClosed() || this.connectingHost == null) {
+				return null;
+			}
+			try {
+				return this.receivedMessageBuffer.poll(this.socket.getSoTimeout());
+			} catch (Exception e) {
+				return null;
+			}
 		}
 
 		@Override

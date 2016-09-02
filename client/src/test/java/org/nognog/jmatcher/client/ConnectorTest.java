@@ -89,9 +89,9 @@ public class ConnectorTest {
 			connectionInviter.setPortTellerPort(portTellerPort);
 			final Integer entryKey = connectionInviter.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
-			final Connector requester = new Connector(connectorName, jmatcherHost);
-			requester.setInternalNetworkPortTellerPort(portTellerPort);
-			try (ConnectorPeer connectorPeer = requester.connect(entryKey)) {
+			final Connector connector = new Connector(connectorName, jmatcherHost);
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (ConnectorPeer connectorPeer = connector.connect(entryKey)) {
 				assertThat(connectorPeer, is(not(nullValue())));
 				assertThat(connectionInviter.getConnectingHosts().size(), is(1));
 				assertThat(((Host) connectionInviter.getConnectingHosts().toArray()[0]).getName(), is(connectorName));
@@ -101,29 +101,54 @@ public class ConnectorTest {
 			// wait for connectionInviter to handle cancel-request
 			Thread.sleep(250);
 			assertThat(connectionInviter.getConnectingHosts().size(), is(0));
-			try (ConnectorPeer connectionRequesterPeer = requester.connect(entryKey)) {
-				assertThat(connectionRequesterPeer, is(not(nullValue())));
+			try (ConnectorPeer connectorPeer = connector.connect(entryKey)) {
+				assertThat(connectorPeer, is(not(nullValue())));
 				assertThat(connectionInviter.getConnectingHosts().size(), is(1));
 				assertThat(((Host) connectionInviter.getConnectingHosts().toArray()[0]).getName(), is(connectorName));
-				assertThat(connectionRequesterPeer.getConnectingHost().getName(), is(connectionInviterName));
-				this.testSendMessageFromConnectorToConnectionInviter(connectionRequesterPeer, connectionInviter);
-				this.testSendMessageFromConnectionInviterToConnector(connectionInviter, connectionRequesterPeer);
+				assertThat(connectorPeer.getConnectingHost().getName(), is(connectionInviterName));
+				final long timeBeforeStartingToExchangeMessages = System.nanoTime();
+				System.out.println("start to exchange messages"); //$NON-NLS-1$
+				this.testSendMessageFromConnectionInviterToConnector(connectionInviter, connectorPeer);
+				System.out.println("finished sending two messages from inviter to connector " + ((System.nanoTime() - timeBeforeStartingToExchangeMessages) / 1000000) + "[ms]経過"); //$NON-NLS-1$ //$NON-NLS-2$
+				this.testSendMessageFromConnectorToConnectionInviter(connectorPeer, connectionInviter);
+				System.out.println("finished sending two messages from connector to inviter " + ((System.nanoTime() - timeBeforeStartingToExchangeMessages) / 1000000) + "[ms]経過"); //$NON-NLS-1$ //$NON-NLS-2$
 				connectionInviter.stopInvitation();
-				this.testSendMessageFromConnectorToConnectionInviter(connectionRequesterPeer, connectionInviter);
-				this.testSendMessageFromConnectionInviterToConnector(connectionInviter, connectionRequesterPeer);
-				connectionRequesterPeer.close();
+				System.out.println("stopped the invitation " + +((System.nanoTime() - timeBeforeStartingToExchangeMessages) / 1000000) + "[ms]経過"); //$NON-NLS-1$ //$NON-NLS-2$
+				this.testSendMessageFromConnectionInviterToConnector(connectionInviter, connectorPeer);
+				System.out.println("finished sending two messages from inviter to connector " + ((System.nanoTime() - timeBeforeStartingToExchangeMessages) / 1000000) + "[ms]経過"); //$NON-NLS-1$ //$NON-NLS-2$
+				this.testSendMessageFromConnectorToConnectionInviter(connectorPeer, connectionInviter);
+				System.out.println("finished sending two messages from connector to inviter " + ((System.nanoTime() - timeBeforeStartingToExchangeMessages) / 1000000) + "[ms]経過"); //$NON-NLS-1$ //$NON-NLS-2$
+				connectorPeer.close();
+				System.out.println("finished exchanging messages"); //$NON-NLS-1$
 				try {
-					this.testSendMessageFromConnectorToConnectionInviter(connectionRequesterPeer, connectionInviter);
+					this.testSendMessageFromConnectorToConnectionInviter(connectorPeer, connectionInviter);
 				} catch (Throwable t) {
 					// success
 				}
 				try {
-					this.testSendMessageFromConnectionInviterToConnector(connectionInviter, connectionRequesterPeer);
+					this.testSendMessageFromConnectionInviterToConnector(connectionInviter, connectorPeer);
 				} catch (Throwable t) {
 					// success
 				}
 			}
 		}
+	}
+	
+	@SuppressWarnings({ "boxing", "static-method" })
+	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviterPeer connectionInviter, final ConnectorPeer connectorPeer) {
+		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
+		final String messageFromConnectionInviter1 = "from connectionInviter1"; //$NON-NLS-1$
+		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter1, connectorHost), is(true));
+		final String messageFromInvalidMessage = connectorPeer.receiveMessageFrom(new Host(null, 0));
+		assertThat(messageFromInvalidMessage, is(not(messageFromConnectionInviter1)));
+		final String successMessage = connectorPeer.receiveMessageFrom(connectorPeer.getConnectingHost());
+		assertThat(successMessage, is(messageFromConnectionInviter1));
+		final String messageFromConnectionInviter2 = "from connectionInviter2"; //$NON-NLS-1$
+		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter2, connectorHost), is(true));
+		final ReceivedMessage receivedMessage = connectorPeer.receiveMessage();
+		assertThat(receivedMessage, is(not(nullValue())));
+		assertThat(receivedMessage.getSender(), is(connectorPeer.getConnectingHost()));
+		assertThat(receivedMessage.getMessage(), is(messageFromConnectionInviter2));
 	}
 
 	@SuppressWarnings({ "boxing", "static-method" })
@@ -131,33 +156,15 @@ public class ConnectorTest {
 		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
 		final String messageFromConnector1 = "from connector1"; //$NON-NLS-1$
 		assertThat(connectorPeer.sendMessage(messageFromConnector1), is(true));
-		final String failedMessage = connectionInviter.receiveMessageFrom(new Host(null, 0));
-		assertThat(failedMessage, is(not(messageFromConnector1)));
+		final String invalidMessage = connectionInviter.receiveMessageFrom(new Host(null, 0));
+		assertThat(invalidMessage, is(not(messageFromConnector1)));
 		final String successMessage = connectionInviter.receiveMessageFrom(connectorHost);
 		assertThat(successMessage, is(messageFromConnector1));
-
 		final String messageFromConnector2 = "from connector2"; //$NON-NLS-1$
-		assertThat(connectorPeer.sendMessage(messageFromConnector2), is(true));
+		assertThat(connectorPeer.sendMessage(messageFromConnector2), is(true));		
 		final ReceivedMessage receivedMessage = connectionInviter.receiveMessage();
 		assertThat(receivedMessage.getSender(), is(connectorHost));
 		assertThat(receivedMessage.getMessage(), is(messageFromConnector2));
-	}
-
-	@SuppressWarnings({ "boxing", "static-method" })
-	private void testSendMessageFromConnectionInviterToConnector(final ConnectionInviterPeer connectionInviter, final ConnectorPeer connectorPeer) {
-		final Host connectorHost = (Host) connectionInviter.getConnectingHosts().toArray()[0];
-		final String messageFromConnectionInviter1 = "from connectionInviter1"; //$NON-NLS-1$
-		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter1, connectorHost), is(true));
-		final String failedMessage = connectorPeer.receiveMessageFrom(new Host(null, 0));
-		assertThat(failedMessage, is(not(messageFromConnectionInviter1)));
-		final String successMessage = connectorPeer.receiveMessageFrom(connectorPeer.getConnectingHost());
-		assertThat(successMessage, is(messageFromConnectionInviter1));
-
-		final String messageFromConnectionInviter2 = "from connectionInviter2"; //$NON-NLS-1$
-		assertThat(connectionInviter.sendMessageTo(messageFromConnectionInviter2, connectorHost), is(true));
-		final ReceivedMessage receivedMessage = connectorPeer.receiveMessage();
-		assertThat(receivedMessage.getSender(), is(connectorPeer.getConnectingHost()));
-		assertThat(receivedMessage.getMessage(), is(messageFromConnectionInviter2));
 	}
 
 	/**
@@ -211,17 +218,17 @@ public class ConnectorTest {
 	@SuppressWarnings({ "static-method" })
 	private void doTestConnectWith(final int entryKey, final String jmatcherHost, int portTellerPort, boolean expected) throws IOException {
 		final String connectorName = "Uva"; //$NON-NLS-1$
-		final Connector requester = new Connector(connectorName, jmatcherHost);
-		requester.setInternalNetworkPortTellerPort(portTellerPort);
+		final Connector connector = new Connector(connectorName, jmatcherHost);
+		connector.setInternalNetworkPortTellerPort(portTellerPort);
 		if (expected == false) {
-			try (ConnectorPeer connectionRequesterPeer = requester.connect(entryKey)) {
-				assertThat(connectionRequesterPeer, is(nullValue()));
+			try (ConnectorPeer connectorPeer = connector.connect(entryKey)) {
+				assertThat(connectorPeer, is(nullValue()));
 			}
 		} else {
-			try (ConnectorPeer connectionRequesterPeer = requester.connect(entryKey)) {
-				assertThat(connectionRequesterPeer, is(not(nullValue())));
-				assertThat(connectionRequesterPeer.getConnectingHost(), is(not(nullValue())));
-				assertThat(connectionRequesterPeer.getSocket(), is(not(nullValue())));
+			try (ConnectorPeer connectorPeer = connector.connect(entryKey)) {
+				assertThat(connectorPeer, is(not(nullValue())));
+				assertThat(connectorPeer.getConnectingHost(), is(not(nullValue())));
+				assertThat(connectorPeer.getSocket(), is(not(nullValue())));
 			}
 		}
 	}
@@ -284,7 +291,7 @@ public class ConnectorTest {
 				verifyCountOfNotificationOfObserver(mockObserver, 0);
 				connectionInviter.close();
 				Thread.sleep(1000);
-				verifyCountOfNotificationOfObserver(mockObserver, 0);
+				verifyCountOfNotificationOfObserver(mockObserver, 1);
 				connectorPeer.receiveMessage();
 				verifyCountOfNotificationOfObserver(mockObserver, 1);
 			}
@@ -318,7 +325,7 @@ public class ConnectorTest {
 				verifyCountOfNotificationOfObserver(mockObserver, 1);
 				connectionInviter.close();
 				Thread.sleep(1000);
-				verifyCountOfNotificationOfObserver(mockObserver, 1);
+				verifyCountOfNotificationOfObserver(mockObserver, 2);
 				connectorPeer.receiveMessage();
 				verifyCountOfNotificationOfObserver(mockObserver, 2);
 			}
@@ -389,9 +396,9 @@ public class ConnectorTest {
 			connectionInviter.setPortTellerPort(portTellerPort);
 			final Integer entryKey = connectionInviter.startInvitation();
 			assertThat(entryKey, is(not(nullValue())));
-			final Connector requester = new Connector("ice-cocoa", jmatcherHost); //$NON-NLS-1$
-			requester.setInternalNetworkPortTellerPort(portTellerPort);
-			try (ConnectorPeer connectorPeer = requester.connect(entryKey)) {
+			final Connector connector = new Connector("ice-cocoa", jmatcherHost); //$NON-NLS-1$
+			connector.setInternalNetworkPortTellerPort(portTellerPort);
+			try (ConnectorPeer connectorPeer = connector.connect(entryKey)) {
 				assertThat(connectorPeer, is(not(nullValue())));
 				assertThat(connectorPeer.isOnline(), is(true));
 				assertThat(connectorPeer.getConnectingHost(), is(not(nullValue())));
