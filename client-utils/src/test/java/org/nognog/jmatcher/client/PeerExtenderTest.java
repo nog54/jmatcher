@@ -64,9 +64,9 @@ public class PeerExtenderTest {
 			final Integer sentObject = Integer.valueOf(8829401);
 			final String serializedSentObject = peerExtender.serialize(sentObject);
 			final Host[] targetHosts = { new Host(null, 0) };
-			peerExtender.send(sentObject, targetHosts);
+			peerExtender.sendObjectTo(sentObject, targetHosts);
 			this.enableEncryption(peerExtender);
-			peerExtender.send(sentObject, targetHosts);
+			peerExtender.sendObjectTo(sentObject, targetHosts);
 			final String[] encryptedStringReceiver = new String[1];
 			new Verifications() {
 				{
@@ -95,7 +95,7 @@ public class PeerExtenderTest {
 			System.out.println("decryptedObject = " + decryptedObject); //$NON-NLS-1$
 			assertThat(decryptedObject, is(sentObject));
 			this.disableEncryption(peerExtender);
-			peerExtender.send(sentObject, targetHosts);
+			peerExtender.sendObjectTo(sentObject, targetHosts);
 			new Verifications() {
 				{
 					peerExtender.getPeer().sendMessageTo(serializedSentObject, targetHosts);

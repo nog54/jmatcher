@@ -14,9 +14,9 @@
 
 package org.nognog.jmatcher.client;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.DatagramSocket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.util.Set;
@@ -34,7 +34,7 @@ import com.sun.org.apache.xerces.internal.impl.dv.util.Base64;
 /**
  * @author goshi 2016/02/12
  */
-public abstract class PeerExtender implements Closeable {
+public abstract class PeerExtender implements Peer {
 	private final Peer peer;
 	private Cipher encrypter;
 	private Cipher decrypter;
@@ -68,17 +68,29 @@ public abstract class PeerExtender implements Closeable {
 	 * It's used to create an object from a sent string.
 	 * 
 	 * @param string
-	 * @param klass 
+	 * @param klass
 	 * @return the deserialized string
 	 */
 	public abstract <T> T deserialize(String string, Class<T> klass);
+
+	@Override
+	public Host[] sendMessageTo(String message, Host... hosts) {
+		if (this.encrypter == null) {
+			return this.peer.sendMessageTo(message, hosts);
+		}
+		try {
+			return this.peer.sendMessageTo(this.encrypt(message), hosts);
+		} catch (Exception e) {
+			return new Host[0];
+		}
+	}
 
 	/**
 	 * @param object
 	 * @param hosts
 	 * @return hosts which this succeeded in sending to
 	 */
-	public Host[] send(Object object, Host... hosts) {
+	public Host[] sendObjectTo(Object object, Host... hosts) {
 		if (hosts == null || hosts.length == 0) {
 			return new Host[0];
 		}
@@ -86,42 +98,27 @@ public abstract class PeerExtender implements Closeable {
 		if (serializedObject == null) {
 			return new Host[0];
 		}
-		if (this.encrypter == null) {
-			return this.peer.sendMessageTo(serializedObject, hosts);
-		}
-		try {
-			return this.peer.sendMessageTo(this.encrypt(serializedObject), hosts);
-		} catch (Exception e) {
-			return new Host[0];
-		}
+		return this.sendMessageTo(serializedObject, hosts);
 	}
 
-	/**
-	 * Receive a message from specified host and deserialize. If the method
-	 * failed to deserialize a message, the message will be lost. It shouldn't
-	 * be used expect in case we are sure what the type of object will be
-	 * received next.
-	 * 
-	 * @param host
-	 * @param type
-	 * @return an object
-	 */
-	public <T> T receiveFrom(Host host, Class<T> type) {
-		final String serializedObject = this.receiveFrom(host);
-		if (serializedObject == null) {
+	@Override
+	public ReceivedMessage receiveMessage() {
+		final ReceivedMessage receivedMessage = this.peer.receiveMessage();
+		if (receivedMessage == null) {
 			return null;
 		}
-		return this.deserialize(serializedObject, type);
+		if (this.decrypter == null) {
+			return receivedMessage;
+		}
+		try {
+			return new ReceivedMessage(receivedMessage.getSender(), this.decrypt(receivedMessage.getMessage()));
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
-	/**
-	 * Receive a message from specified host.
-	 * 
-	 * @param host
-	 * @return a message from the host, or null if timeout occured or catched
-	 *         other SocketException
-	 */
-	public String receiveFrom(Host host) {
+	@Override
+	public String receiveMessageFrom(Host host) {
 		final String message = this.peer.receiveMessageFrom(host);
 		if (message == null) {
 			return null;
@@ -137,6 +134,24 @@ public abstract class PeerExtender implements Closeable {
 	}
 
 	/**
+	 * Receive a message from specified host and deserialize. If the method
+	 * failed to deserialize a message, the message will be lost. It shouldn't
+	 * be used expect in case we are sure what the type of object will be
+	 * received next.
+	 * 
+	 * @param host
+	 * @param type
+	 * @return an object
+	 */
+	public <T> T receiveFrom(Host host, Class<T> type) {
+		final String serializedObject = this.receiveMessageFrom(host);
+		if (serializedObject == null) {
+			return null;
+		}
+		return this.deserialize(serializedObject, type);
+	}
+
+	/**
 	 * Receive a message from any host and deserialize. If this method failed to
 	 * deserialize the message, the message will be lost. This method shouldn't
 	 * be used expect in case we are sure what the type of object will be
@@ -147,7 +162,7 @@ public abstract class PeerExtender implements Closeable {
 	 *         SocketException or failed to deserialize
 	 */
 	public <T> ReceivedObject<T> receive(Class<T> type) {
-		final ReceivedMessage receivedMessage = this.receive();
+		final ReceivedMessage receivedMessage = this.receiveMessage();
 		if (receivedMessage == null) {
 			return null;
 		}
@@ -158,31 +173,15 @@ public abstract class PeerExtender implements Closeable {
 		return new ReceivedObject<>(receivedMessage.getSender(), object);
 	}
 
-	/**
-	 * Received a message from any host.
-	 * 
-	 * @return received message, or null if timeout occured or catched other
-	 *         SocketException
-	 */
-	public ReceivedMessage receive() {
-		final ReceivedMessage receivedMessage = this.peer.receiveMessage();
-		if (receivedMessage == null) {
-			return null;
-		}
-		if (this.decrypter == null) {
-			return receivedMessage;
-		}
-		try {
-			final String decryptedMessage = this.decrypt(receivedMessage.getMessage());
-			return new ReceivedMessage(receivedMessage.getSender(), decryptedMessage);
-		} catch (Exception e) {
-			return null;
-		}
+	@Override
+	public DatagramSocket getSocket() {
+		return this.peer.getSocket();
 	}
 
 	/**
 	 * @return size of receive buffer
 	 */
+	@Override
 	public int getReceiveBuffSize() {
 		return this.peer.getReceiveBuffSize();
 	}
@@ -194,6 +193,7 @@ public abstract class PeerExtender implements Closeable {
 	 * 
 	 * @param buffSize
 	 */
+	@Override
 	public void setReceiveBuffSize(int buffSize) {
 		this.peer.setReceiveBuffSize(buffSize);
 	}
@@ -208,8 +208,24 @@ public abstract class PeerExtender implements Closeable {
 	/**
 	 * @return true if the peer is online
 	 */
+	@Override
 	public boolean isOnline() {
 		return this.peer.isOnline();
+	}
+
+	@Override
+	public void addObserver(PeerObserver observer) {
+		this.peer.addObserver(observer);
+	}
+
+	@Override
+	public void removeObserver(PeerObserver observer) {
+		this.peer.removeObserver(observer);
+	}
+
+	@Override
+	public void disconnect(Host host) {
+		this.peer.disconnect(host);
 	}
 
 	@Override
@@ -220,6 +236,7 @@ public abstract class PeerExtender implements Closeable {
 	/**
 	 * @return current connecting hosts
 	 */
+	@Override
 	public Set<Host> getConnectingHosts() {
 		return this.peer.getConnectingHosts();
 	}
@@ -280,7 +297,7 @@ public abstract class PeerExtender implements Closeable {
 		final byte[] decryptedByteMessage = this.decrypter.doFinal(byteMessage);
 		return new String(decryptedByteMessage, charSetName);
 	}
-	
+
 	/**
 	 * @author goshi 2016/02/12
 	 * @param <T>
